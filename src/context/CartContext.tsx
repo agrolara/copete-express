@@ -72,119 +72,33 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: 'pagos@copeteexpress.cl',
   });
 
-  // Cargar estado inicial desde localStorage
+  // Cargar estado centralizado desde la API del Servidor (/api/store)
+  const fetchServerStore = async () => {
+    try {
+      const res = await fetch('/api/store', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.products) setProducts(data.products);
+        if (data.promotions) setPromotions(data.promotions);
+        if (data.sales) setSales(data.sales);
+        if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
+        if (data.bankDetails) setBankDetails(data.bankDetails);
+      }
+    } catch (e) {
+      console.error('Error sincronizando estado con el servidor:', e);
+    }
+  };
+
   useEffect(() => {
-    const savedCart = localStorage.getItem('copete_express_cart');
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (e) {
-        console.error('Error parsing cart', e);
-      }
-    }
+    // Cargar del servidor al iniciar
+    fetchServerStore();
 
-    const savedProducts = localStorage.getItem('copete_express_products');
-    if (savedProducts) {
-      try {
-        setProducts(JSON.parse(savedProducts));
-      } catch (e) {
-        console.error('Error parsing products', e);
-      }
-    }
-
-    const savedSales = localStorage.getItem('copete_express_sales');
-    if (savedSales) {
-      try {
-        setSales(JSON.parse(savedSales));
-      } catch (e) {
-        console.error('Error parsing sales', e);
-      }
-    }
-
-    const savedWa = localStorage.getItem('copete_whatsapp_number');
-    if (savedWa) setWhatsappNumber(savedWa);
-
-    const savedBank = localStorage.getItem('copete_bank_details');
-    if (savedBank) {
-      try {
-        setBankDetails(JSON.parse(savedBank));
-      } catch (e) {
-        console.error('Error parsing bank details', e);
-      }
-    }
+    // Polling ligero de 8 segundos para mantener PC y Celulares 100% sincronizados en tiempo real
+    const interval = setInterval(fetchServerStore, 8000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Persistir cambios en localStorage
-  useEffect(() => {
-    localStorage.setItem('copete_express_cart', JSON.stringify(cart));
-  }, [cart]);
-
-  useEffect(() => {
-    localStorage.setItem('copete_express_products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('copete_express_sales', JSON.stringify(sales));
-  }, [sales]);
-
-  const updateWhatsappNumber = (num: string) => {
-    const cleaned = num.replace(/[^0-9]/g, '');
-    setWhatsappNumber(cleaned);
-    localStorage.setItem('copete_whatsapp_number', cleaned);
-  };
-
-  const updateBankDetails = (details: BankDetails) => {
-    setBankDetails(details);
-    localStorage.setItem('copete_bank_details', JSON.stringify(details));
-  };
-
-  // Revertir y eliminar venta (Devolver stock atrapado)
-  const deleteSale = (saleId: string, restoreStock: boolean = true) => {
-    const targetSale = sales.find((s) => s.id === saleId);
-    if (!targetSale) return;
-
-    if (restoreStock && targetSale.items) {
-      const updatedProducts = [...products];
-
-      targetSale.items.forEach((item) => {
-        if (item.product_id) {
-          const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
-          if (pIdx > -1) {
-            updatedProducts[pIdx] = {
-              ...updatedProducts[pIdx],
-              stock: updatedProducts[pIdx].stock + item.quantity,
-            };
-          }
-        } else if (item.promotion_id) {
-          const promo = promotions.find((p) => p.id === item.promotion_id);
-          if (promo && promo.items) {
-            promo.items.forEach((pi) => {
-              const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
-              if (pIdx > -1) {
-                updatedProducts[pIdx] = {
-                  ...updatedProducts[pIdx],
-                  stock: updatedProducts[pIdx].stock + pi.quantity * item.quantity,
-                };
-              }
-            });
-          }
-        }
-      });
-
-      setProducts(updatedProducts);
-    }
-
-    setSales((prev) => prev.filter((s) => s.id !== saleId));
-  };
-
-  const resetAllData = () => {
-    localStorage.removeItem('copete_express_products');
-    localStorage.removeItem('copete_express_sales');
-    setProducts(INITIAL_PRODUCTS);
-    setSales(INITIAL_SALES);
-  };
-
-  // Sincronizar el carrito en tiempo real con el stock vivo de productos
+  // Sincronizar el carrito de compras en tiempo real con el stock vivo de productos
   useEffect(() => {
     setCart((prevCart) => {
       return prevCart
@@ -215,6 +129,96 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .filter(Boolean) as CartItem[];
     });
   }, [products, promotions]);
+
+  const updateWhatsappNumber = async (num: string) => {
+    const cleaned = num.replace(/[^0-9]/g, '');
+    setWhatsappNumber(cleaned);
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { whatsappNumber: cleaned } }),
+      });
+    } catch (e) {
+      console.error('Error enviando settings al servidor:', e);
+    }
+  };
+
+  const updateBankDetails = async (details: BankDetails) => {
+    setBankDetails(details);
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { bankDetails: details } }),
+      });
+    } catch (e) {
+      console.error('Error enviando bankDetails al servidor:', e);
+    }
+  };
+
+  // Revertir y eliminar venta (Devolver stock atrapado)
+  const deleteSale = async (saleId: string, restoreStock: boolean = true) => {
+    const targetSale = sales.find((s) => s.id === saleId);
+    if (!targetSale) return;
+
+    let updatedProducts = [...products];
+
+    if (restoreStock && targetSale.items) {
+      targetSale.items.forEach((item) => {
+        if (item.product_id) {
+          const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+          if (pIdx > -1) {
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              stock: updatedProducts[pIdx].stock + item.quantity,
+            };
+          }
+        } else if (item.promotion_id) {
+          const promo = promotions.find((p) => p.id === item.promotion_id);
+          if (promo && promo.items) {
+            promo.items.forEach((pi) => {
+              const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
+              if (pIdx > -1) {
+                updatedProducts[pIdx] = {
+                  ...updatedProducts[pIdx],
+                  stock: updatedProducts[pIdx].stock + pi.quantity * item.quantity,
+                };
+              }
+            });
+          }
+        }
+      });
+
+      setProducts(updatedProducts);
+    }
+
+    setSales((prev) => prev.filter((s) => s.id !== saleId));
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'DELETE_SALE', payload: { saleId, updatedProducts: restoreStock ? updatedProducts : null } }),
+      });
+    } catch (e) {
+      console.error('Error enviando deleteSale al servidor:', e);
+    }
+  };
+
+  const resetAllData = async () => {
+    setProducts(INITIAL_PRODUCTS);
+    setSales(INITIAL_SALES);
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RESET_ALL' }),
+      });
+    } catch (e) {
+      console.error('Error enviando resetAllData al servidor:', e);
+    }
+  };
 
   const addToCart = (item: Product | Promotion, type: 'product' | 'promotion') => {
     let maxStock = 0;
@@ -381,7 +385,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // REGISTRAR VENTA DINÁMICAMENTE EN EL ESTADO Y LOCALSTORAGE
+    // REGISTRAR VENTA EN EL SERVIDOR CENTRALIZADO
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
@@ -398,6 +402,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProducts(updatedProducts);
     clearCart();
     setIsCartOpen(false);
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ADD_SALE', payload: { sale: newSale, updatedProducts } }),
+      });
+    } catch (e) {
+      console.error('Error enviando nueva venta al servidor:', e);
+    }
 
     return {
       success: true,
@@ -483,7 +497,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // REGISTRAR VENTA OFICIAL EN EL ESTADO
+    // REGISTRAR VENTA EN EL SERVIDOR CENTRALIZADO
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
@@ -498,6 +512,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setSales((prev) => [newSale, ...prev]);
     setProducts(updatedProducts);
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ADD_SALE', payload: { sale: newSale, updatedProducts } }),
+      });
+    } catch (e) {
+      console.error('Error enviando pedido admin al servidor:', e);
+    }
 
     const formattedTotal = new Intl.NumberFormat('es-CL', {
       style: 'currency',
