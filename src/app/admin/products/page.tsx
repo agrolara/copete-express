@@ -383,7 +383,7 @@ export default function AdminProductsPage() {
         isOpen={isCropOpen}
         imageUrl={cropTargetUrl}
         onClose={() => setIsCropOpen(false)}
-        onApply={handleApplyCroppedImage}
+        onSave={(finalUrl) => handleApplyCroppedImage(finalUrl)}
       />
     </div>
   );
