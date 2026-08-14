@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCart, PaymentMethod } from '@/context/CartContext';
 import {
   DollarSign,
@@ -23,6 +23,11 @@ import {
   CheckSquare,
   Square,
   RotateCcw,
+  Calendar,
+  PieChart as PieIcon,
+  BarChart3,
+  Layers,
+  ArrowUpRight,
 } from 'lucide-react';
 import {
   BarChart,
@@ -35,7 +40,12 @@ import {
   Pie,
   Cell,
   CartesianGrid,
+  Legend,
+  AreaChart,
+  Area,
 } from 'recharts';
+
+type TimeRangeFilter = 'day' | 'week' | 'month' | 'all';
 
 export default function AdminDashboardPage() {
   const {
@@ -51,6 +61,9 @@ export default function AdminDashboardPage() {
     resetAllData,
   } = useCart();
 
+  // Estado del Filtro Temporal (Por Día, Por Semana, Por Mes, Todo)
+  const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
+
   // Modal para Crear Pedido Manual por WhatsApp (Administradores)
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -59,7 +72,9 @@ export default function AdminDashboardPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('transferencia');
 
   // Selección de Ítems (tiqueado)
-  const [selectedItems, setSelectedItems] = useState<{ [id: string]: { selected: boolean; quantity: number; type: 'product' | 'promotion' } }>({});
+  const [selectedItems, setSelectedItems] = useState<{
+    [id: string]: { selected: boolean; quantity: number; type: 'product' | 'promotion' };
+  }>({});
 
   const [generatedSummary, setGeneratedSummary] = useState('');
   const [summaryWhatsappUrl, setSummaryWhatsappUrl] = useState('');
@@ -71,59 +86,162 @@ export default function AdminDashboardPage() {
   const [editWaNum, setEditWaNum] = useState(whatsappNumber);
   const [editBank, setEditBank] = useState(bankDetails);
 
-  // 1. REQUISITO MÓDULO 4: Alerta de Stock Bajo (< 3 Unidades)
-  const criticalStockProducts = products.filter((p) => p.stock < 3);
+  // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes, Todo)
+  const filteredSales = useMemo(() => {
+    const now = new Date();
 
-  // 2. Métricas de Ventas DINÁMICAS (Calculadas directamente de sales del contexto)
-  const totalRevenue = sales.reduce((sum, s) => sum + s.total_amount, 0);
+    return sales.filter((sale) => {
+      const saleDate = new Date(sale.created_at);
 
-  const formattedTotalRevenue = new Intl.NumberFormat('es-CL', {
+      if (timeRange === 'day') {
+        return (
+          saleDate.getDate() === now.getDate() &&
+          saleDate.getMonth() === now.getMonth() &&
+          saleDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'week') {
+        const diffTime = Math.abs(now.getTime() - saleDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 7;
+      }
+
+      if (timeRange === 'month') {
+        return (
+          saleDate.getMonth() === now.getMonth() &&
+          saleDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      return true; // 'all'
+    });
+  }, [sales, timeRange]);
+
+  // 2. MÉTRICAS FINANCIERAS Y ANÁLISIS DE COSTOS, MÁRGENES Y GANANCIA NETA
+  const financialMetrics = useMemo(() => {
+    let totalRevenue = 0;
+    let totalCost = 0;
+
+    filteredSales.forEach((sale) => {
+      totalRevenue += sale.total_amount;
+
+      sale.items?.forEach((item) => {
+        if (item.product_id) {
+          const prod = products.find((p) => p.id === item.product_id);
+          const costUnit = prod?.cost_price || item.cost_price || Math.round(item.unit_price * 0.6);
+          totalCost += costUnit * item.quantity;
+        } else if (item.promotion_id) {
+          const promo = promotions.find((p) => p.id === item.promotion_id);
+          let promoCost = 0;
+          if (promo?.items) {
+            promo.items.forEach((pi) => {
+              const prod = products.find((p) => p.id === pi.product_id);
+              const costUnit = prod?.cost_price || Math.round((prod?.price || 5000) * 0.6);
+              promoCost += costUnit * pi.quantity;
+            });
+          } else {
+            promoCost = Math.round(item.unit_price * 0.6);
+          }
+          totalCost += promoCost * item.quantity;
+        }
+      });
+    });
+
+    const netProfit = totalRevenue - totalCost;
+    const marginPct = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
+
+    return {
+      totalRevenue,
+      totalCost,
+      netProfit,
+      marginPct,
+    };
+  }, [filteredSales, products, promotions]);
+
+  const formattedRevenue = new Intl.NumberFormat('es-CL', {
     style: 'currency',
     currency: 'CLP',
     maximumFractionDigits: 0,
-  }).format(totalRevenue);
+  }).format(financialMetrics.totalRevenue);
 
-  // 3. Días Más Vendidos
-  const daysOfWeekMap: { [key: string]: number } = {
-    Lun: 0,
-    Mar: 0,
-    Mié: 0,
-    Jue: 0,
-    Vie: 0,
-    Sáb: 0,
-    Dom: 0,
+  const formattedCost = new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0,
+  }).format(financialMetrics.totalCost);
+
+  const formattedProfit = new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0,
+  }).format(financialMetrics.netProfit);
+
+  // 3. DATOS DE GRÁFICO: Días / Período más vendidas vs costos
+  const daysOfWeekMap: { [key: string]: { ventas: number; costos: number; ganancia: number } } = {
+    Lun: { ventas: 0, costos: 0, ganancia: 0 },
+    Mar: { ventas: 0, costos: 0, ganancia: 0 },
+    Mié: { ventas: 0, costos: 0, ganancia: 0 },
+    Jue: { ventas: 0, costos: 0, ganancia: 0 },
+    Vie: { ventas: 0, costos: 0, ganancia: 0 },
+    Sáb: { ventas: 0, costos: 0, ganancia: 0 },
+    Dom: { ventas: 0, costos: 0, ganancia: 0 },
   };
 
-  sales.forEach((s) => {
+  filteredSales.forEach((s) => {
     const date = new Date(s.created_at);
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const dayName = dayNames[date.getDay()];
-    if (daysOfWeekMap[dayName] !== undefined) {
-      daysOfWeekMap[dayName] += s.total_amount;
+
+    let saleCost = 0;
+    s.items?.forEach((item) => {
+      const prod = products.find((p) => p.id === item.product_id);
+      const costUnit = prod?.cost_price || Math.round(item.unit_price * 0.6);
+      saleCost += costUnit * item.quantity;
+    });
+
+    if (daysOfWeekMap[dayName]) {
+      daysOfWeekMap[dayName].ventas += s.total_amount;
+      daysOfWeekMap[dayName].costos += saleCost;
+      daysOfWeekMap[dayName].ganancia += s.total_amount - saleCost;
     }
   });
 
-  const daysData = [
-    { day: 'Lun', ventas: daysOfWeekMap['Lun'] },
-    { day: 'Mar', ventas: daysOfWeekMap['Mar'] },
-    { day: 'Mié', ventas: daysOfWeekMap['Mié'] },
-    { day: 'Jue', ventas: daysOfWeekMap['Jue'] },
-    { day: 'Vie', ventas: daysOfWeekMap['Vie'] },
-    { day: 'Sáb', ventas: daysOfWeekMap['Sáb'] },
-    { day: 'Dom', ventas: daysOfWeekMap['Dom'] },
+  const chartFinancialData = [
+    { day: 'Lun', Ventas: daysOfWeekMap['Lun'].ventas, Costos: daysOfWeekMap['Lun'].costos, Ganancia: daysOfWeekMap['Lun'].ganancia },
+    { day: 'Mar', Ventas: daysOfWeekMap['Mar'].ventas, Costos: daysOfWeekMap['Mar'].costos, Ganancia: daysOfWeekMap['Mar'].ganancia },
+    { day: 'Mié', Ventas: daysOfWeekMap['Mié'].ventas, Costos: daysOfWeekMap['Mié'].costos, Ganancia: daysOfWeekMap['Mié'].ganancia },
+    { day: 'Jue', Ventas: daysOfWeekMap['Jue'].ventas, Costos: daysOfWeekMap['Jue'].costos, Ganancia: daysOfWeekMap['Jue'].ganancia },
+    { day: 'Vie', Ventas: daysOfWeekMap['Vie'].ventas, Costos: daysOfWeekMap['Vie'].costos, Ganancia: daysOfWeekMap['Vie'].ganancia },
+    { day: 'Sáb', Ventas: daysOfWeekMap['Sáb'].ventas, Costos: daysOfWeekMap['Sáb'].costos, Ganancia: daysOfWeekMap['Sáb'].ganancia },
+    { day: 'Dom', Ventas: daysOfWeekMap['Dom'].ventas, Costos: daysOfWeekMap['Dom'].costos, Ganancia: daysOfWeekMap['Dom'].ganancia },
   ];
 
-  // 4. Popularidad de Productos
-  const popularityMap: { [name: string]: number } = {};
-  sales.forEach((s) => {
+  // 4. ANÁLISIS DE PRODUCTOS, MÁRGENES Y UNIDADES
+  const productMarginMap: { [name: string]: { ventas: number; costos: number; ganancia: number; unidades: number } } = {};
+  filteredSales.forEach((s) => {
     s.items?.forEach((item) => {
-      popularityMap[item.item_name] = (popularityMap[item.item_name] || 0) + item.quantity;
+      if (!productMarginMap[item.item_name]) {
+        productMarginMap[item.item_name] = { ventas: 0, costos: 0, ganancia: 0, unidades: 0 };
+      }
+      const prod = products.find((p) => p.id === item.product_id);
+      const costUnit = prod?.cost_price || Math.round(item.unit_price * 0.6);
+      const itemCost = costUnit * item.quantity;
+      const itemRev = item.unit_price * item.quantity;
+
+      productMarginMap[item.item_name].ventas += itemRev;
+      productMarginMap[item.item_name].costos += itemCost;
+      productMarginMap[item.item_name].ganancia += itemRev - itemCost;
+      productMarginMap[item.item_name].unidades += item.quantity;
     });
   });
 
-  const popularityData = Object.keys(popularityMap).map((name) => ({
-    name: name.length > 18 ? name.substring(0, 18) + '...' : name,
-    unidades: popularityMap[name],
+  const productMarginData = Object.keys(productMarginMap).map((name) => ({
+    name: name.length > 16 ? name.substring(0, 16) + '...' : name,
+    Ventas: productMarginMap[name].ventas,
+    Costos: productMarginMap[name].costos,
+    Ganancia: productMarginMap[name].ganancia,
+    Unidades: productMarginMap[name].unidades,
   }));
 
   // 5. Salud de Stock
@@ -136,6 +254,8 @@ export default function AdminDashboardPage() {
     { name: 'Stock Crítico (<3)', value: criticalCount, color: '#f59e0b' },
     { name: 'Agotados (0)', value: outOfStockCount, color: '#ef4444' },
   ];
+
+  const criticalStockProducts = products.filter((p) => p.stock < 3);
 
   const handleQuickRestock = (productId: string, amount: number) => {
     setProducts((prev) =>
@@ -218,43 +338,85 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header Dashboard & Botones de Acción */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Dashboard Administrador & Pedidos WhatsApp
+            Dashboard Administrador & Analítica Financiera
           </h1>
           <p className="text-xs text-zinc-400">
-            Gestiona ventas por WhatsApp, tiquea pedidos, selecciona forma de pago y controla el inventario.
+            Control de Ventas, Costos Unitarios, Márgenes de Ganancia Neta y Gestión de Pedidos por WhatsApp.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Botón Principal: Crear Pedido WhatsApp */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* selector FILTRO TEMPORAL (Por Día, Por Semana, Por Mes, Todo) */}
+          <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl">
+            <button
+              onClick={() => setTimeRange('day')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'day'
+                  ? 'bg-purple-600 text-white shadow-neon-purple'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Hoy (Por Día)
+            </button>
+            <button
+              onClick={() => setTimeRange('week')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'week'
+                  ? 'bg-purple-600 text-white shadow-neon-purple'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Por Semana
+            </button>
+            <button
+              onClick={() => setTimeRange('month')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'month'
+                  ? 'bg-purple-600 text-white shadow-neon-purple'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Por Mes
+            </button>
+            <button
+              onClick={() => setTimeRange('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'all'
+                  ? 'bg-purple-600 text-white shadow-neon-purple'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Histórico Todo
+            </button>
+          </div>
+
           <button
             onClick={() => {
               setGeneratedSummary('');
               setSelectedItems({});
               setIsOrderModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all border border-emerald-400/30"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all border border-emerald-400/30"
           >
             <MessageSquare className="w-4 h-4" />
             <span>+ Crear Pedido WhatsApp</span>
           </button>
 
-          {/* Configuración Super Admin */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 transition-colors"
             title="Configurar WhatsApp y Datos Bancarios"
           >
             <Settings className="w-4 h-4 text-purple-400" />
-            <span>Ajustes WhatsApp & Banco</span>
+            <span>Ajustes</span>
           </button>
         </div>
       </div>
 
-      {/* REQUISITO MÓDULO 4: ALERTA DE STOCK BAJO (< 3) BANNER PRIORITARIO */}
+      {/* BANNER DE ALERTA DE STOCK CRÍTICO (< 3) */}
       {criticalStockProducts.length > 0 && (
         <section className="p-5 rounded-3xl bg-gradient-to-r from-red-950/80 via-zinc-900 to-orange-950/80 border-2 border-red-500/60 shadow-neon-red space-y-4">
           <div className="flex items-center justify-between">
@@ -301,84 +463,95 @@ export default function AdminDashboardPage() {
         </section>
       )}
 
-      {/* KPI METRIC CARDS - 100% DINÁMICAS */}
+      {/* TARJETAS DE ANALÍTICA FINANCIERA: VENTAS, COSTOS, GANANCIA NETA Y MARGEN */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+        {/* Ventas Totales */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-purple-500/30 flex items-center justify-between shadow-neon-purple">
           <div>
             <span className="text-xs font-semibold text-zinc-400">Ventas Totales</span>
-            <h3 className="text-2xl font-black text-white mt-1">{formattedTotalRevenue}</h3>
-            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-1">
-              <TrendingUp className="w-3 h-3" /> Actualizado en vivo
+            <h3 className="text-2xl font-black text-white mt-1">{formattedRevenue}</h3>
+            <span className="text-[10px] text-purple-400 font-bold block mt-1">
+              {filteredSales.length} Transacciones filtradas
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30 shadow-neon-purple">
+          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+        {/* Costo Total de Ventas */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-orange-500/30 flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Transacciones</span>
-            <h3 className="text-2xl font-black text-white mt-1">{sales.length} Pedidos</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Ventas registradas</span>
+            <span className="text-xs font-semibold text-zinc-400">Costo Total de Ventas</span>
+            <h3 className="text-2xl font-black text-orange-400 mt-1">{formattedCost}</h3>
+            <span className="text-[10px] text-zinc-500 block mt-1">Costo unitario acumulado</span>
           </div>
-          <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30 shadow-neon-orange">
-            <ShoppingBag className="w-6 h-6" />
+          <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
+            <Layers className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+        {/* Ganancia Neta (Ventas - Costos) */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-between shadow-lg">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">WhatsApp Destino</span>
-            <h3 className="text-sm font-extrabold text-emerald-400 mt-1 truncate">+{whatsappNumber}</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Configurado</span>
+            <span className="text-xs font-semibold text-zinc-400">Ganancia Neta (Utilidad)</span>
+            <h3 className="text-2xl font-black text-emerald-400 mt-1">{formattedProfit}</h3>
+            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-1">
+              <ArrowUpRight className="w-3.5 h-3.5" /> Ingreso libre estimado
+            </span>
           </div>
           <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
-            <MessageSquare className="w-6 h-6" />
+            <TrendingUp className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+        {/* Porcentaje de Margen Global */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-teal-500/30 flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Packs Promocionales</span>
-            <h3 className="text-2xl font-black text-white mt-1">{promotions.length} Promos</h3>
-            <span className="text-[10px] text-purple-400 block mt-1">Bundles activos</span>
+            <span className="text-xs font-semibold text-zinc-400">Margen de Ganancia</span>
+            <h3 className="text-2xl font-black text-teal-300 mt-1">{financialMetrics.marginPct}%</h3>
+            <span className="text-[10px] text-zinc-500 block mt-1">Rentabilidad bruta comercial</span>
           </div>
-          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
-            <Sparkles className="w-6 h-6" />
+          <div className="p-3 rounded-2xl bg-teal-600/20 text-teal-400 border border-teal-500/30">
+            <BarChart3 className="w-6 h-6" />
           </div>
         </div>
       </section>
 
-      {/* SECCIÓN DE GRÁFICOS INTERACTIVOS (MÓDULO 6) */}
+      {/* GRÁFICOS ANALÍTICOS FINANCIEROS Y DE PRODUCTOS */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Gráfico Comparativo: Ventas vs Costos vs Ganancia por Día/Período */}
         <div className="lg:col-span-2 p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-extrabold text-white">Días de Mayor Venta</h3>
-              <p className="text-xs text-zinc-400">Volumen de ingresos ($) por día de la semana</p>
-            </div>
-            <div className="p-2 rounded-xl bg-zinc-800 text-zinc-400">
-              <TrendingUp className="w-4 h-4 text-purple-400" />
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-purple-400" />
+                <span>Análisis Financiero: Ventas vs Costos vs Ganancia Neta</span>
+              </h3>
+              <p className="text-xs text-zinc-400">Comparativa de ingresos brutos, costos de inventario y utilidad libre por día</p>
             </div>
           </div>
 
-          <div className="h-64 w-full pt-4">
+          <div className="h-72 w-full pt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={daysData}>
+              <BarChart data={chartFinancialData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="day" stroke="#a1a1aa" fontSize={12} />
                 <YAxis stroke="#a1a1aa" fontSize={11} tickFormatter={(val) => `$${val / 1000}k`} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46', borderRadius: '12px' }}
-                  formatter={(val: any) => [`$${val.toLocaleString('es-CL')}`, 'Ventas']}
+                  formatter={(val: any) => [`$${val.toLocaleString('es-CL')}`]}
                 />
-                <Bar dataKey="ventas" fill="#a855f7" radius={[8, 8, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                <Bar dataKey="Ventas" fill="#a855f7" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Costos" fill="#f97316" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Ganancia" fill="#10b981" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
+        {/* Salud del Inventario */}
         <div className="p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4 flex flex-col justify-between">
           <div>
             <h3 className="text-base font-extrabold text-white">Salud del Inventario</h3>
@@ -420,17 +593,27 @@ export default function AdminDashboardPage() {
         </div>
       </section>
 
-      {/* Ranking de Productos */}
+      {/* GRÁFICO DE ANÁLISIS DE PRODUCTOS, COSTOS Y VENTAS */}
       <section className="p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
-        <h3 className="text-base font-extrabold text-white">Ranking de Popularidad (Unidades Vendidas)</h3>
-        <div className="h-56 w-full">
+        <div>
+          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-emerald-400" />
+            <span>Análisis Analítico Gráfico por Producto: Ventas, Costos y Ganancia</span>
+          </h3>
+          <p className="text-xs text-zinc-400">Desglose de contribución financiera por producto demandado</p>
+        </div>
+
+        <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={popularityData} layout="vertical">
+            <BarChart data={productMarginData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis type="number" stroke="#a1a1aa" fontSize={12} />
+              <XAxis type="number" stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
               <YAxis dataKey="name" type="category" stroke="#a1a1aa" fontSize={11} width={130} />
-              <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46' }} />
-              <Bar dataKey="unidades" fill="#f97316" radius={[0, 8, 8, 0]} />
+              <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46' }} formatter={(v: any) => [`$${v.toLocaleString('es-CL')}`]} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Bar dataKey="Ventas" fill="#a855f7" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="Costos" fill="#f97316" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="Ganancia" fill="#10b981" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

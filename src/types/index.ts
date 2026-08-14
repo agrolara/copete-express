@@ -14,6 +14,7 @@ export interface Product {
   description: string;
   category: string;
   price: number;
+  cost_price?: number; // Costo unitario para cálculo de márgenes y ganancias
   stock: number;
   image_url: string;
   is_active: boolean;
@@ -59,6 +60,7 @@ export interface SaleItem {
   promotion_id?: string;
   quantity: number;
   unit_price: number;
+  cost_price?: number; // Costo unitario al momento de la venta
   item_name: string;
 }
 

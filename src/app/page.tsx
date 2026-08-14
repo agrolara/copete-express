@@ -123,7 +123,7 @@ export default function HomePage() {
               <div className="space-y-4">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-extrabold tracking-wider uppercase">
                   <Zap className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
-                  <span>Despacho Exprés 24/7 en Chile</span>
+                  <span>Despacho Express 24/7 en Chile</span>
                 </div>
                 <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white leading-tight tracking-tight">
                   Tu Previa Organizada en <span className="bg-gradient-to-r from-purple-400 to-orange-400 bg-clip-text text-transparent">Minutos</span>

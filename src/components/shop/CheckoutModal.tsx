@@ -95,7 +95,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-orange-400" />
-            <h3 className="text-lg font-extrabold text-white">Finalizar Pedido Exprés</h3>
+            <h3 className="text-lg font-extrabold text-white">Finalizar Pedido Express</h3>
           </div>
           <button
             onClick={onClose}

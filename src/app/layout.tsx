@@ -5,7 +5,7 @@ import { CartDrawer } from '@/components/shop/CartDrawer';
 
 export const metadata: Metadata = {
   title: 'Copete Express | Tu Botillería Digital 24/7',
-  description: 'Venta y despacho exprés de piscos, cervezas, destilados, vinos y packs de promociones en 30 minutos.',
+  description: 'Venta y despacho Express de piscos, cervezas, destilados, vinos y packs de promociones en 30 minutos.',
 };
 
 export default function RootLayout({

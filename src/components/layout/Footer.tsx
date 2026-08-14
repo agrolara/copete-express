@@ -15,8 +15,8 @@ export const Footer: React.FC = () => {
             </div>
             <span className="text-base font-extrabold text-white">COPETE EXPRESS</span>
           </div>
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            Tu botillería digital de confianza. Entregas exprés de piscos, cervezas, destilados y packs promocionales directo a tu fiesta.
+          <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
+            Tu botillería digital de confianza. Entregas Express de piscos, cervezas, destilados y packs promocionales directo a tu fiesta.
           </p>
         </div>
 

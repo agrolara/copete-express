@@ -49,10 +49,10 @@ export const CartDrawer: React.FC = () => {
               </button>
             </div>
 
-            {/* Banner Despacho Exprès */}
+            {/* Banner Despacho Express */}
             <div className="bg-gradient-to-r from-purple-950/80 via-zinc-900 to-orange-950/80 px-4 py-2 border-b border-purple-500/20 flex items-center justify-center gap-2 text-xs text-purple-200">
               <Truck className="w-4 h-4 text-orange-400 shrink-0" />
-              <span>¡Despacho exprés en <strong>30-45 min</strong> a tu puerta! 🚀</span>
+              <span>¡Despacho Express en <strong>30-45 min</strong> a tu puerta! 🚀</span>
             </div>
 
             {/* Cart Items List */}

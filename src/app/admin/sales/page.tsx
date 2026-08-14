@@ -1,21 +1,50 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCart } from '@/context/CartContext';
 import { Sale } from '@/types';
-import { ShoppingBag, Search, Calendar, User, Phone, MapPin, CheckCircle2, Eye, X, Trash2, RotateCcw } from 'lucide-react';
+import { ShoppingBag, Search, Calendar, User, Phone, MapPin, CheckCircle2, Eye, X, Trash2, RotateCcw, TrendingUp, DollarSign } from 'lucide-react';
+
+type TimeFilter = 'day' | 'week' | 'month' | 'all';
 
 export default function AdminSalesPage() {
-  const { sales, deleteSale } = useCart();
+  const { sales, deleteSale, products } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
-  const filteredSales = sales.filter(
-    (s) =>
-      s.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.delivery_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+
+    return sales.filter((s) => {
+      const saleDate = new Date(s.created_at);
+
+      // Filtro de Fecha
+      let matchesTime = true;
+      if (timeFilter === 'day') {
+        matchesTime =
+          saleDate.getDate() === now.getDate() &&
+          saleDate.getMonth() === now.getMonth() &&
+          saleDate.getFullYear() === now.getFullYear();
+      } else if (timeFilter === 'week') {
+        const diffTime = Math.abs(now.getTime() - saleDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        matchesTime = diffDays <= 7;
+      } else if (timeFilter === 'month') {
+        matchesTime =
+          saleDate.getMonth() === now.getMonth() &&
+          saleDate.getFullYear() === now.getFullYear();
+      }
+
+      // Filtro Búsqueda
+      const matchesSearch =
+        s.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.delivery_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.id.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesTime && matchesSearch;
+    });
+  }, [sales, timeFilter, searchTerm]);
 
   const handleDeleteSale = (saleId: string) => {
     if (confirm('¿Deseas eliminar esta venta y restaurar automáticamente el stock de sus productos al inventario?')) {
@@ -36,8 +65,52 @@ export default function AdminSalesPage() {
             Historial de Ventas & Transacciones
           </h1>
           <p className="text-xs text-zinc-400">
-            Registro dinámico de ventas. Puedes eliminar o revertir pedidos para devolver el stock atrapado al inventario.
+            Filtra ventas por día, semana o mes. Elimina o revierte pedidos para devolver el stock al inventario.
           </p>
+        </div>
+
+        {/* Filtros Temporales (Día, Semana, Mes, Todo) */}
+        <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl">
+          <button
+            onClick={() => setTimeFilter('day')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              timeFilter === 'day'
+                ? 'bg-purple-600 text-white shadow-neon-purple'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Hoy (Día)
+          </button>
+          <button
+            onClick={() => setTimeFilter('week')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              timeFilter === 'week'
+                ? 'bg-purple-600 text-white shadow-neon-purple'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Esta Semana
+          </button>
+          <button
+            onClick={() => setTimeFilter('month')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              timeFilter === 'month'
+                ? 'bg-purple-600 text-white shadow-neon-purple'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Este Mes
+          </button>
+          <button
+            onClick={() => setTimeFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              timeFilter === 'all'
+                ? 'bg-purple-600 text-white shadow-neon-purple'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Histórico Todo
+          </button>
         </div>
       </div>
 
@@ -58,7 +131,7 @@ export default function AdminSalesPage() {
         <div className="overflow-x-auto">
           {filteredSales.length === 0 ? (
             <div className="p-8 text-center text-zinc-500 text-xs">
-              No hay ventas registradas en el historial.
+              No hay ventas registradas para el filtro seleccionado.
             </div>
           ) : (
             <table className="w-full text-left text-xs">
@@ -122,7 +195,7 @@ export default function AdminSalesPage() {
         </div>
       </div>
 
-      {/* Modal Detalle de Venta */}
+      {/* Modal Detalle de Venta con Costos y Márgenes */}
       {selectedSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -156,27 +229,40 @@ export default function AdminSalesPage() {
               <div>
                 <h4 className="font-bold text-white mb-2">Ítems Comprados:</h4>
                 <div className="space-y-1.5">
-                  {selectedSale.items?.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center"
-                    >
-                      <div>
-                        <span className="font-bold text-white block">{item.item_name}</span>
-                        <span className="text-zinc-500 text-[10px]">
-                          {item.quantity} unit. x ${item.unit_price.toLocaleString('es-CL')}
-                        </span>
+                  {selectedSale.items?.map((item) => {
+                    const prod = products.find((p) => p.id === item.product_id);
+                    const costUnit = prod?.cost_price || item.cost_price || Math.round(item.unit_price * 0.6);
+                    const totalItemRev = item.unit_price * item.quantity;
+                    const totalItemCost = costUnit * item.quantity;
+                    const itemProfit = totalItemRev - totalItemCost;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center"
+                      >
+                        <div>
+                          <span className="font-bold text-white block">{item.item_name}</span>
+                          <span className="text-zinc-500 text-[10px]">
+                            {item.quantity} un. x ${item.unit_price.toLocaleString('es-CL')} (Costo: ${costUnit.toLocaleString('es-CL')})
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-extrabold text-purple-400 block">
+                            ${totalItemRev.toLocaleString('es-CL')}
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-bold">
+                            +${itemProfit.toLocaleString('es-CL')} ganancia
+                          </span>
+                        </div>
                       </div>
-                      <span className="font-extrabold text-purple-400">
-                        ${(item.quantity * item.unit_price).toLocaleString('es-CL')}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="pt-3 border-t border-zinc-800 flex justify-between items-center text-sm">
-                <span className="font-bold text-white">Total Pagado:</span>
+                <span className="font-bold text-white">Total Venta:</span>
                 <span className="text-lg font-black text-purple-400">
                   ${selectedSale.total_amount.toLocaleString('es-CL')}
                 </span>
