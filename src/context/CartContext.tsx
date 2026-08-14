@@ -184,8 +184,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSales(INITIAL_SALES);
   };
 
+  // Sincronizar el carrito en tiempo real con el stock vivo de productos
+  useEffect(() => {
+    setCart((prevCart) => {
+      return prevCart
+        .map((item) => {
+          let realMax = 0;
+          if (item.type === 'product') {
+            const prod = products.find((p) => p.id === item.id);
+            realMax = prod ? prod.stock : 0;
+          } else {
+            const promo = promotions.find((p) => p.id === item.id);
+            if (promo && promo.items && promo.items.length > 0) {
+              const availablePacks = promo.items.map((pi) => {
+                const matchingProd = products.find((p) => p.id === pi.product_id);
+                if (!matchingProd || matchingProd.stock < pi.quantity) return 0;
+                return Math.floor(matchingProd.stock / pi.quantity);
+              });
+              realMax = Math.min(...availablePacks);
+            }
+          }
+
+          if (realMax <= 0) return null;
+          return {
+            ...item,
+            quantity: Math.min(item.quantity, realMax),
+            max_stock: realMax,
+          };
+        })
+        .filter(Boolean) as CartItem[];
+    });
+  }, [products, promotions]);
+
   const addToCart = (item: Product | Promotion, type: 'product' | 'promotion') => {
-    let maxStock = 99;
+    let maxStock = 0;
     let itemsSummary = '';
 
     if (type === 'product') {
@@ -212,7 +244,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const existing = prevCart[existingIndex];
         const newQty = Math.min(existing.quantity + 1, maxStock);
         const updated = [...prevCart];
-        updated[existingIndex] = { ...existing, quantity: newQty };
+        updated[existingIndex] = { ...existing, quantity: newQty, max_stock: maxStock };
         return updated;
       } else {
         const price = type === 'product' ? (item as Product).price : (item as Promotion).promo_price;
@@ -246,13 +278,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const validQty = Math.min(quantity, item.max_stock);
-          return { ...item, quantity: validQty };
-        }
-        return item;
-      })
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            let realMax = item.max_stock;
+            if (item.type === 'product') {
+              const prod = products.find((p) => p.id === item.id);
+              if (prod) realMax = prod.stock;
+            } else {
+              const promo = promotions.find((p) => p.id === item.id);
+              if (promo && promo.items && promo.items.length > 0) {
+                const availablePacks = promo.items.map((pi) => {
+                  const matchingProd = products.find((p) => p.id === pi.product_id);
+                  if (!matchingProd || matchingProd.stock < pi.quantity) return 0;
+                  return Math.floor(matchingProd.stock / pi.quantity);
+                });
+                realMax = Math.min(...availablePacks);
+              }
+            }
+
+            if (realMax <= 0) return null;
+            const validQty = Math.min(quantity, realMax);
+            return { ...item, quantity: validQty, max_stock: realMax };
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
     );
   };
 
