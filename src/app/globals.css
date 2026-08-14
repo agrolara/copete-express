@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+body {
+  background-color: #09090b;
+  color: #f4f4f5;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Ocultar barra de desplazamiento en contenedores horizontales */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Neon Glow Utilities */
+.shadow-neon-purple {
+  box-shadow: 0 0 20px -3px rgba(168, 85, 247, 0.4);
+}
+.shadow-neon-orange {
+  box-shadow: 0 0 20px -3px rgba(249, 115, 22, 0.4);
+}
+.shadow-neon-red {
+  box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
