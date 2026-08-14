@@ -96,8 +96,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [cart]);
 
   const updateWhatsappNumber = (num: string) => {
-    setWhatsappNumber(num);
-    localStorage.setItem('copete_whatsapp_number', num);
+    const cleaned = num.replace(/[^0-9]/g, '');
+    setWhatsappNumber(cleaned);
+    localStorage.setItem('copete_whatsapp_number', cleaned);
   };
 
   const updateBankDetails = (details: BankDetails) => {

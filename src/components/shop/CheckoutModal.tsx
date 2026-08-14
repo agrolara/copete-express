@@ -10,7 +10,7 @@ interface CheckoutModalProps {
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose }) => {
-  const { cart, totalAmount, processCheckout } = useCart();
+  const { cart, totalAmount, processCheckout, whatsappNumber } = useCart();
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -28,8 +28,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose })
     maximumFractionDigits: 0,
   }).format(totalAmount);
 
-  // Número de WhatsApp configurado para recibir pedidos (Admin/Ventas)
-  const targetWhatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '56912345678';
+  // Usar el número de WhatsApp dinámico actualizado por el Super Admin (o fallback env)
+  const targetWhatsappNumber = (whatsappNumber || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '56912345678').replace(/[^0-9]/g, '');
 
   const generateWhatsappMessage = () => {
     const itemsSummary = cart
