@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartItem, Product, Promotion, Sale } from '@/types';
+import { CartItem, Product, Promotion, Sale, SaleItem } from '@/types';
 import { INITIAL_PRODUCTS, INITIAL_PROMOTIONS, INITIAL_SALES } from '@/lib/supabase';
 
 export interface BankDetails {
@@ -27,8 +27,12 @@ interface CartContextType {
   setIsCartOpen: (open: boolean) => void;
   products: Product[];
   promotions: Promotion[];
+  sales: Sale[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   setPromotions: React.Dispatch<React.SetStateAction<Promotion[]>>;
+  setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
+  deleteSale: (saleId: string, restoreStock?: boolean) => void;
+  resetAllData: () => void;
   whatsappNumber: string;
   setWhatsappNumber: (num: string) => void;
   bankDetails: BankDetails;
@@ -55,6 +59,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [promotions, setPromotions] = useState<Promotion[]>(INITIAL_PROMOTIONS);
+  const [sales, setSales] = useState<Sale[]>(INITIAL_SALES);
 
   // Configuración de WhatsApp y Datos Bancarios editables por el Super Admin
   const [whatsappNumber, setWhatsappNumber] = useState<string>('56912345678');
@@ -78,6 +83,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    const savedProducts = localStorage.getItem('copete_express_products');
+    if (savedProducts) {
+      try {
+        setProducts(JSON.parse(savedProducts));
+      } catch (e) {
+        console.error('Error parsing products', e);
+      }
+    }
+
+    const savedSales = localStorage.getItem('copete_express_sales');
+    if (savedSales) {
+      try {
+        setSales(JSON.parse(savedSales));
+      } catch (e) {
+        console.error('Error parsing sales', e);
+      }
+    }
+
     const savedWa = localStorage.getItem('copete_whatsapp_number');
     if (savedWa) setWhatsappNumber(savedWa);
 
@@ -91,9 +114,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // Persistir cambios en localStorage
   useEffect(() => {
     localStorage.setItem('copete_express_cart', JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem('copete_express_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('copete_express_sales', JSON.stringify(sales));
+  }, [sales]);
 
   const updateWhatsappNumber = (num: string) => {
     const cleaned = num.replace(/[^0-9]/g, '');
@@ -104,6 +136,52 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateBankDetails = (details: BankDetails) => {
     setBankDetails(details);
     localStorage.setItem('copete_bank_details', JSON.stringify(details));
+  };
+
+  // Revertir y eliminar venta (Devolver stock atrapado)
+  const deleteSale = (saleId: string, restoreStock: boolean = true) => {
+    const targetSale = sales.find((s) => s.id === saleId);
+    if (!targetSale) return;
+
+    if (restoreStock && targetSale.items) {
+      const updatedProducts = [...products];
+
+      targetSale.items.forEach((item) => {
+        if (item.product_id) {
+          const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+          if (pIdx > -1) {
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              stock: updatedProducts[pIdx].stock + item.quantity,
+            };
+          }
+        } else if (item.promotion_id) {
+          const promo = promotions.find((p) => p.id === item.promotion_id);
+          if (promo && promo.items) {
+            promo.items.forEach((pi) => {
+              const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
+              if (pIdx > -1) {
+                updatedProducts[pIdx] = {
+                  ...updatedProducts[pIdx],
+                  stock: updatedProducts[pIdx].stock + pi.quantity * item.quantity,
+                };
+              }
+            });
+          }
+        }
+      });
+
+      setProducts(updatedProducts);
+    }
+
+    setSales((prev) => prev.filter((s) => s.id !== saleId));
+  };
+
+  const resetAllData = () => {
+    localStorage.removeItem('copete_express_products');
+    localStorage.removeItem('copete_express_sales');
+    setProducts(INITIAL_PRODUCTS);
+    setSales(INITIAL_SALES);
   };
 
   const addToCart = (item: Product | Promotion, type: 'product' | 'promotion') => {
@@ -197,6 +275,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const updatedProducts = [...products];
+    const saleItemsList: SaleItem[] = [];
+    let calculatedTotal = 0;
 
     for (const item of cart) {
       if (item.type === 'product') {
@@ -211,6 +291,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...updatedProducts[pIndex],
           stock: updatedProducts[pIndex].stock - item.quantity,
         };
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          product_id: item.id,
+          quantity: item.quantity,
+          unit_price: item.price,
+          item_name: item.name,
+        });
+        calculatedTotal += item.price * item.quantity;
       } else {
         const promo = promotions.find((p) => p.id === item.id);
         if (promo && promo.items) {
@@ -229,9 +318,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           }
         }
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          promotion_id: item.id,
+          quantity: item.quantity,
+          unit_price: item.price,
+          item_name: item.name,
+        });
+        calculatedTotal += item.price * item.quantity;
       }
     }
 
+    // REGISTRAR VENTA DINÁMICAMENTE EN EL ESTADO Y LOCALSTORAGE
+    const newSaleId = crypto.randomUUID();
+    const newSale: Sale = {
+      id: newSaleId,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      delivery_address: deliveryAddress,
+      total_amount: calculatedTotal,
+      status: 'completed',
+      created_at: new Date().toISOString(),
+      items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
+    };
+
+    setSales((prev) => [newSale, ...prev]);
     setProducts(updatedProducts);
     clearCart();
     setIsCartOpen(false);
@@ -257,6 +369,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedProducts = [...products];
     let totalOrderPrice = 0;
     const itemLines: string[] = [];
+    const saleItemsList: SaleItem[] = [];
 
     for (const item of orderItems) {
       if (item.type === 'product') {
@@ -276,6 +389,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const itemTotal = prod.price * item.quantity;
         totalOrderPrice += itemTotal;
         itemLines.push(`• ${item.quantity}x ${prod.name} - $${itemTotal.toLocaleString('es-CL')}`);
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          product_id: prod.id,
+          quantity: item.quantity,
+          unit_price: prod.price,
+          item_name: prod.name,
+        });
       } else {
         const promo = promotions.find((p) => p.id === item.id);
         if (!promo) continue;
@@ -300,9 +421,31 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const itemTotal = promo.promo_price * item.quantity;
         totalOrderPrice += itemTotal;
         itemLines.push(`• ${item.quantity}x ${promo.name} - $${itemTotal.toLocaleString('es-CL')}`);
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          promotion_id: promo.id,
+          quantity: item.quantity,
+          unit_price: promo.promo_price,
+          item_name: promo.name,
+        });
       }
     }
 
+    // REGISTRAR VENTA OFICIAL EN EL ESTADO
+    const newSaleId = crypto.randomUUID();
+    const newSale: Sale = {
+      id: newSaleId,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      delivery_address: deliveryAddress,
+      total_amount: totalOrderPrice,
+      status: 'completed',
+      created_at: new Date().toISOString(),
+      items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
+    };
+
+    setSales((prev) => [newSale, ...prev]);
     setProducts(updatedProducts);
 
     const formattedTotal = new Intl.NumberFormat('es-CL', {
@@ -311,7 +454,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       maximumFractionDigits: 0,
     }).format(totalOrderPrice);
 
-    // Formatear texto completo para reenviar por WhatsApp
     let paymentDetailsText = '';
     if (paymentMethod === 'transferencia') {
       paymentDetailsText = `💳 *DATOS PARA TRANSFERENCIA BANCARIA:*\n` +
@@ -357,8 +499,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsCartOpen,
         products,
         promotions,
+        sales,
         setProducts,
         setPromotions,
+        setSales,
+        deleteSale,
+        resetAllData,
         whatsappNumber,
         setWhatsappNumber: updateWhatsappNumber,
         bankDetails,
