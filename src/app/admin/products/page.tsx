@@ -164,7 +164,7 @@ export default function AdminProductsPage() {
                 alt={prod.name}
                 objectFit="cover"
                 badgeText={prod.stock < 3 ? (prod.stock === 0 ? 'Agotado' : `Stock: ${prod.stock}`) : undefined}
-                badgeType={prod.stock < 3 ? (prod.stock === 0 ? 'outOfStock' : 'lowStock') : undefined}
+                badgeType={prod.stock < 3 ? (prod.stock === 0 ? 'outOfStock' : 'warning') : undefined}
               />
 
               <div className="mt-3 flex-1 flex flex-col justify-between">
