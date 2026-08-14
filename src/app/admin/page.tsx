@@ -63,6 +63,7 @@ export default function AdminDashboardPage() {
 
   // Estado del Filtro Temporal (Por Día, Por Semana, Por Mes, Todo)
   const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>('current');
 
   // Modal para Crear Pedido Manual por WhatsApp (Administradores)
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -86,7 +87,31 @@ export default function AdminDashboardPage() {
   const [editWaNum, setEditWaNum] = useState(whatsappNumber);
   const [editBank, setEditBank] = useState(bankDetails);
 
-  // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes, Todo)
+  // Generar lista dinámica de meses disponibles en el historial (Mes Actual + Meses Anteriores)
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    monthsSet.add(currentKey);
+
+    sales.forEach((s) => {
+      const d = new Date(s.created_at);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthsSet.add(monthKey);
+    });
+
+    return Array.from(monthsSet)
+      .sort()
+      .reverse()
+      .map((key) => {
+        const [y, m] = key.split('-');
+        const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+        const label = dateObj.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+        return { key, label: label.charAt(0).toUpperCase() + label.slice(1) };
+      });
+  }, [sales]);
+
+  // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes Específico, Todo)
   const filteredSales = useMemo(() => {
     const now = new Date();
 
@@ -108,6 +133,14 @@ export default function AdminDashboardPage() {
       }
 
       if (timeRange === 'month') {
+        if (selectedMonth && selectedMonth !== 'all' && selectedMonth !== 'current') {
+          const [targetYear, targetMonth] = selectedMonth.split('-').map(Number);
+          return (
+            saleDate.getFullYear() === targetYear &&
+            saleDate.getMonth() + 1 === targetMonth
+          );
+        }
+        // Mes actual por defecto
         return (
           saleDate.getMonth() === now.getMonth() &&
           saleDate.getFullYear() === now.getFullYear()
@@ -116,7 +149,7 @@ export default function AdminDashboardPage() {
 
       return true; // 'all'
     });
-  }, [sales, timeRange]);
+  }, [sales, timeRange, selectedMonth]);
 
   // 2. MÉTRICAS FINANCIERAS Y ANÁLISIS DE COSTOS, MÁRGENES Y GANANCIA NETA
   const financialMetrics = useMemo(() => {
@@ -349,8 +382,8 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* selector FILTRO TEMPORAL (Por Día, Por Semana, Por Mes, Todo) */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl">
+          {/* selector FILTRO TEMPORAL (Por Día, Por Semana, Por Mes Específico/Anterior, Todo) */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-900 border border-zinc-800 p-1.5 rounded-2xl">
             <button
               onClick={() => setTimeRange('day')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -372,7 +405,10 @@ export default function AdminDashboardPage() {
               Por Semana
             </button>
             <button
-              onClick={() => setTimeRange('month')}
+              onClick={() => {
+                setTimeRange('month');
+                if (selectedMonth === 'all') setSelectedMonth('current');
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 timeRange === 'month'
                   ? 'bg-purple-600 text-white shadow-neon-purple'
@@ -381,8 +417,35 @@ export default function AdminDashboardPage() {
             >
               Por Mes
             </button>
+
+            {/* SELECTOR DESPLEGABLE DE MESES ANTERIORES */}
+            <select
+              value={timeRange === 'month' ? selectedMonth : 'all'}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'all') {
+                  setTimeRange('all');
+                  setSelectedMonth('all');
+                } else {
+                  setTimeRange('month');
+                  setSelectedMonth(val);
+                }
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-xs font-bold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+            >
+              <option value="all">📅 Seleccionar Mes Anterior...</option>
+              {availableMonths.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+
             <button
-              onClick={() => setTimeRange('all')}
+              onClick={() => {
+                setTimeRange('all');
+                setSelectedMonth('all');
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 timeRange === 'all'
                   ? 'bg-purple-600 text-white shadow-neon-purple'

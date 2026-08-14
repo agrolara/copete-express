@@ -12,6 +12,31 @@ export default function AdminSalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>('current');
+
+  // Generar lista dinámica de meses disponibles en el historial (Mes Actual + Meses Anteriores)
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    monthsSet.add(currentKey);
+
+    sales.forEach((s) => {
+      const d = new Date(s.created_at);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthsSet.add(monthKey);
+    });
+
+    return Array.from(monthsSet)
+      .sort()
+      .reverse()
+      .map((key) => {
+        const [y, m] = key.split('-');
+        const dateObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+        const label = dateObj.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+        return { key, label: label.charAt(0).toUpperCase() + label.slice(1) };
+      });
+  }, [sales]);
 
   const filteredSales = useMemo(() => {
     const now = new Date();
@@ -31,9 +56,16 @@ export default function AdminSalesPage() {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         matchesTime = diffDays <= 7;
       } else if (timeFilter === 'month') {
-        matchesTime =
-          saleDate.getMonth() === now.getMonth() &&
-          saleDate.getFullYear() === now.getFullYear();
+        if (selectedMonth && selectedMonth !== 'all' && selectedMonth !== 'current') {
+          const [targetYear, targetMonth] = selectedMonth.split('-').map(Number);
+          matchesTime =
+            saleDate.getFullYear() === targetYear &&
+            saleDate.getMonth() + 1 === targetMonth;
+        } else {
+          matchesTime =
+            saleDate.getMonth() === now.getMonth() &&
+            saleDate.getFullYear() === now.getFullYear();
+        }
       }
 
       // Filtro Búsqueda
@@ -44,7 +76,7 @@ export default function AdminSalesPage() {
 
       return matchesTime && matchesSearch;
     });
-  }, [sales, timeFilter, searchTerm]);
+  }, [sales, timeFilter, selectedMonth, searchTerm]);
 
   const handleDeleteSale = (saleId: string) => {
     if (confirm('¿Deseas eliminar esta venta y restaurar automáticamente el stock de sus productos al inventario?')) {
@@ -65,12 +97,12 @@ export default function AdminSalesPage() {
             Historial de Ventas & Transacciones
           </h1>
           <p className="text-xs text-zinc-400">
-            Filtra ventas por día, semana o mes. Elimina o revierte pedidos para devolver el stock al inventario.
+            Filtra ventas por día, semana o meses anteriores. Elimina o revierte pedidos para devolver el stock al inventario.
           </p>
         </div>
 
-        {/* Filtros Temporales (Día, Semana, Mes, Todo) */}
-        <div className="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-2xl">
+        {/* Filtros Temporales (Día, Semana, Mes Específico/Anterior, Todo) */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-zinc-900 border border-zinc-800 p-1.5 rounded-2xl">
           <button
             onClick={() => setTimeFilter('day')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -92,17 +124,47 @@ export default function AdminSalesPage() {
             Esta Semana
           </button>
           <button
-            onClick={() => setTimeFilter('month')}
+            onClick={() => {
+              setTimeFilter('month');
+              if (selectedMonth === 'all') setSelectedMonth('current');
+            }}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               timeFilter === 'month'
                 ? 'bg-purple-600 text-white shadow-neon-purple'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            Este Mes
+            Por Mes
           </button>
+
+          {/* SELECTOR DESPLEGABLE DE MESES ANTERIORES */}
+          <select
+            value={timeFilter === 'month' ? selectedMonth : 'all'}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'all') {
+                setTimeFilter('all');
+                setSelectedMonth('all');
+              } else {
+                setTimeFilter('month');
+                setSelectedMonth(val);
+              }
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-xs font-bold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+          >
+            <option value="all">📅 Seleccionar Mes Anterior...</option>
+            {availableMonths.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+
           <button
-            onClick={() => setTimeFilter('all')}
+            onClick={() => {
+              setTimeFilter('all');
+              setSelectedMonth('all');
+            }}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               timeFilter === 'all'
                 ? 'bg-purple-600 text-white shadow-neon-purple'
