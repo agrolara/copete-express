@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCart } from '@/context/CartContext';
-import { Expense, ExpenseCategoryType } from '@/types';
+import { Expense } from '@/types';
 import {
   Receipt,
   Plus,
@@ -20,6 +20,8 @@ import {
   TrendingDown,
   Layers,
   ArrowDownRight,
+  Sparkles,
+  FolderPlus,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -37,7 +39,7 @@ import {
 
 type TimeFilter = 'day' | 'week' | 'month' | 'all';
 
-const EXPENSE_CATEGORIES: ExpenseCategoryType[] = [
+const DEFAULT_EXPENSE_CATEGORIES = [
   'Arriendo',
   'Sueldos y Turnos',
   'Servicios Básicos (Luz/Agua/Internet)',
@@ -48,7 +50,7 @@ const EXPENSE_CATEGORIES: ExpenseCategoryType[] = [
   'Otros Gastos',
 ];
 
-const CATEGORY_COLORS: { [cat: string]: string } = {
+const PREDEFINED_COLORS: { [cat: string]: string } = {
   Arriendo: '#ef4444',
   'Sueldos y Turnos': '#f97316',
   'Servicios Básicos (Luz/Agua/Internet)': '#eab308',
@@ -59,6 +61,19 @@ const CATEGORY_COLORS: { [cat: string]: string } = {
   'Otros Gastos': '#64748b',
 };
 
+const DYNAMIC_PALETTE = [
+  '#3b82f6',
+  '#84cc16',
+  '#f43f5e',
+  '#06b6d4',
+  '#d946ef',
+  '#14b8a6',
+  '#e11d48',
+  '#6366f1',
+  '#fbbf24',
+  '#22c55e',
+];
+
 export default function AdminExpensesPage() {
   const { expenses, addExpense, deleteExpense } = useCart();
 
@@ -66,10 +81,47 @@ export default function AdminExpensesPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Categorías personalizadas creadas por el usuario
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('copete_custom_expense_categories');
+      if (saved) {
+        setCustomCategories(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Error loading custom expense categories', e);
+    }
+  }, []);
+
+  // Unificar todas las categorías (Predeterminadas + Guardadas + Presentes en gastos)
+  const allCategories = useMemo(() => {
+    const catSet = new Set<string>(DEFAULT_EXPENSE_CATEGORIES);
+    customCategories.forEach((c) => catSet.add(c));
+    expenses.forEach((e) => {
+      if (e.category) catSet.add(e.category);
+    });
+    return Array.from(catSet);
+  }, [customCategories, expenses]);
+
+  // Función para obtener color por categoría
+  const getCategoryColor = (catName: string) => {
+    if (PREDEFINED_COLORS[catName]) return PREDEFINED_COLORS[catName];
+    let hash = 0;
+    for (let i = 0; i < catName.length; i++) {
+      hash = catName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % DYNAMIC_PALETTE.length;
+    return DYNAMIC_PALETTE[index];
+  };
+
   // Modal para registrar nuevo gasto
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Bolsas y Empaques');
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<ExpenseCategoryType>('Bolsas y Empaques');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'transferencia'>('efectivo');
@@ -157,12 +209,32 @@ export default function AdminExpensesPage() {
     return Object.entries(catMap).map(([name, value]) => ({
       name,
       value,
-      color: CATEGORY_COLORS[name] || '#64748b',
+      color: getCategoryColor(name),
     }));
   }, [filteredExpenses]);
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    let finalCategory = selectedCategory;
+    if (isCreatingNewCategory) {
+      if (!newCategoryName.trim()) {
+        alert('Ingresa el nombre de la nueva categoría de gasto.');
+        return;
+      }
+      finalCategory = newCategoryName.trim();
+      // Guardar en customCategories
+      if (!customCategories.includes(finalCategory)) {
+        const updated = [...customCategories, finalCategory];
+        setCustomCategories(updated);
+        try {
+          localStorage.setItem('copete_custom_expense_categories', JSON.stringify(updated));
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+
     if (!description.trim() || amount <= 0) {
       alert('Ingresa una descripción válida y un monto mayor a 0.');
       return;
@@ -170,7 +242,7 @@ export default function AdminExpensesPage() {
 
     setLoading(true);
     const result = await addExpense({
-      category,
+      category: finalCategory,
       description: description.trim(),
       amount,
       date,
@@ -184,6 +256,8 @@ export default function AdminExpensesPage() {
       setDescription('');
       setAmount(0);
       setReceiptNumber('');
+      setIsCreatingNewCategory(false);
+      setNewCategoryName('');
     } else {
       alert(result.message);
     }
@@ -204,8 +278,8 @@ export default function AdminExpensesPage() {
             <Receipt className="w-7 h-7 text-red-400" />
             <span>Gestión de Gastos Operacionales</span>
           </h1>
-          <p className="text-xs text-zinc-400">
-            Registro de egresos clasificados por categoría. Se descuentan automáticamente de la Caja y de las Utilidades Netas.
+          <p className="text-xs text-zinc-400 mt-1">
+            Registro y clasificación de egresos. Crea todas las categorías personalizadas que necesites; se descuentan automáticamente de la Caja y Utilidades.
           </p>
         </div>
 
@@ -284,8 +358,12 @@ export default function AdminExpensesPage() {
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-red hover:opacity-95 transition-all"
+            onClick={() => {
+              setIsCreatingNewCategory(false);
+              setNewCategoryName('');
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-red-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-red hover:opacity-95 transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>+ Registrar Gasto</span>
@@ -295,49 +373,55 @@ export default function AdminExpensesPage() {
 
       {/* TARJETAS DE GASTOS */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-red-500/30 flex items-center justify-between shadow-neon-red">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-red-500/40 flex items-center justify-between shadow-neon-red">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Total Gastos Operacionales</span>
-            <h3 className="text-2xl font-black text-red-400 mt-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-red-300">
+              Total Gastos Operacionales
+            </span>
+            <h3 className="text-3xl font-black text-red-400 mt-1.5">
               ${totalExpensesAmount.toLocaleString('es-CL')}
             </h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">
-              {filteredExpenses.length} egresos filtrados
+            <span className="text-[11px] text-zinc-400 block mt-1">
+              {filteredExpenses.length} egresos en {allCategories.length} categorías
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30">
+          <div className="p-3.5 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/40">
             <TrendingDown className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-emerald-500/40 flex items-center justify-between shadow-neon-emerald">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Pagado con Caja Efectivo</span>
-            <h3 className="text-2xl font-black text-emerald-400 mt-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">
+              Pagado con Caja Efectivo
+            </span>
+            <h3 className="text-3xl font-black text-emerald-400 mt-1.5">
               ${expensesCash.toLocaleString('es-CL')}
             </h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Descontado de efectivo físico</span>
+            <span className="text-[11px] text-zinc-400 block mt-1">Descontado del efectivo físico</span>
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+          <div className="p-3.5 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/40">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-purple-500/30 flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-purple-500/40 flex items-center justify-between shadow-neon-purple">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Pagado con Transferencia/Banco</span>
-            <h3 className="text-2xl font-black text-purple-400 mt-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-300">
+              Pagado con Transferencia / Banco
+            </span>
+            <h3 className="text-3xl font-black text-purple-400 mt-1.5">
               ${expensesTransfer.toLocaleString('es-CL')}
             </h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Descontado de cuenta digital</span>
+            <span className="text-[11px] text-zinc-400 block mt-1">Descontado de cuenta bancaria</span>
           </div>
-          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+          <div className="p-3.5 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/40">
             <CreditCard className="w-6 h-6" />
           </div>
         </div>
       </section>
 
-      {/* GRÁFICO DE GASTOS POR CATEGORÍA */}
+      {/* GRÁFICOS DE DISTRIBUCIÓN DE GASTOS */}
       {categoryData.length > 0 && (
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 p-6 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
@@ -350,12 +434,12 @@ export default function AdminExpensesPage() {
                 <BarChart data={categoryData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                   <XAxis type="number" stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
-                  <YAxis dataKey="name" type="category" stroke="#a1a1aa" fontSize={11} width={140} />
+                  <YAxis dataKey="name" type="category" stroke="#a1a1aa" fontSize={11} width={150} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46', borderRadius: '12px' }}
                     formatter={(v: any) => [`$${v.toLocaleString('es-CL')}`]}
                   />
-                  <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]}>
                     {categoryData.map((entry, index) => (
                       <Cell key={`bar-${index}`} fill={entry.color} />
                     ))}
@@ -395,10 +479,10 @@ export default function AdminExpensesPage() {
               {categoryData.map((item) => (
                 <div key={item.name} className="flex justify-between items-center text-zinc-300">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="truncate max-w-[130px]">{item.name}</span>
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="truncate max-w-[140px]">{item.name}</span>
                   </div>
-                  <span className="font-bold">${item.value.toLocaleString('es-CL')}</span>
+                  <span className="font-bold font-mono">${item.value.toLocaleString('es-CL')}</span>
                 </div>
               ))}
             </div>
@@ -409,13 +493,16 @@ export default function AdminExpensesPage() {
       {/* TABLA DE HISTORIAL DE GASTOS */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <h2 className="text-lg font-black text-white tracking-tight">Historial de Gastos Registrados</h2>
+          <div>
+            <h2 className="text-lg font-black text-white tracking-tight">Historial de Gastos Registrados</h2>
+            <p className="text-xs text-zinc-400">Listado de todos los egresos registrados por categoría.</p>
+          </div>
 
           <div className="relative max-w-xs w-full">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
             <input
               type="text"
-              placeholder="Buscar gasto por descripción o categoría..."
+              placeholder="Buscar por descripción o categoría..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
@@ -436,7 +523,7 @@ export default function AdminExpensesPage() {
                     <th className="p-4">Fecha</th>
                     <th className="p-4">Categoría</th>
                     <th className="p-4">Descripción / Glosa</th>
-                    <th className="p-4">Boleta/Factura</th>
+                    <th className="p-4">Boleta / Factura</th>
                     <th className="p-4">Medio de Pago</th>
                     <th className="p-4 text-right">Monto</th>
                     <th className="p-4 text-right">Acción</th>
@@ -448,8 +535,11 @@ export default function AdminExpensesPage() {
                       <td className="p-4 text-zinc-400">{exp.date}</td>
                       <td className="p-4">
                         <span
-                          className="px-2.5 py-1 rounded-full text-[10px] font-bold text-white"
-                          style={{ backgroundColor: `${CATEGORY_COLORS[exp.category] || '#64748b'}33`, borderColor: CATEGORY_COLORS[exp.category] || '#64748b' }}
+                          className="px-2.5 py-1 rounded-full text-[10px] font-bold text-white border"
+                          style={{
+                            backgroundColor: `${getCategoryColor(exp.category)}22`,
+                            borderColor: `${getCategoryColor(exp.category)}88`,
+                          }}
                         >
                           {exp.category}
                         </span>
@@ -457,15 +547,17 @@ export default function AdminExpensesPage() {
                       <td className="p-4 font-bold text-white max-w-xs">{exp.description}</td>
                       <td className="p-4 font-mono text-zinc-400 text-[11px]">{exp.receipt_number || '-'}</td>
                       <td className="p-4">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          exp.payment_method === 'transferencia'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        }`}>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            exp.payment_method === 'transferencia'
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
                           {exp.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo'}
                         </span>
                       </td>
-                      <td className="p-4 text-right font-black text-red-400">
+                      <td className="p-4 text-right font-black text-red-400 font-mono text-sm">
                         -${exp.amount.toLocaleString('es-CL')}
                       </td>
                       <td className="p-4 text-right">
@@ -486,38 +578,88 @@ export default function AdminExpensesPage() {
         </div>
       </section>
 
-      {/* MODAL REGISTRAR GASTO */}
+      {/* MODAL REGISTRAR GASTO CON CREACIÓN DINÁMICA DE CATEGORÍAS */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative bg-zinc-900 border border-red-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Header Sticky */}
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <Receipt className="w-5 h-5 text-red-400" />
                 <h3 className="text-base font-extrabold text-white">Registrar Gasto Operacional</h3>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateExpense} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-zinc-400 mb-1 font-bold">Categoría de Gasto *</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ExpenseCategoryType)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500"
-                >
-                  {EXPENSE_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
+              {/* Selector / Creador de Categoría */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-zinc-300 font-bold">Categoría de Gasto *</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewCategory(!isCreatingNewCategory)}
+                    className="text-[11px] font-extrabold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+                  >
+                    {isCreatingNewCategory ? (
+                      <span>Seleccionar Categoría Existente</span>
+                    ) : (
+                      <>
+                        <FolderPlus className="w-3.5 h-3.5" />
+                        <span>+ Crear Nueva Categoría</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {isCreatingNewCategory ? (
+                  <div className="p-3 rounded-2xl bg-zinc-950 border border-purple-500/50 space-y-1.5 animate-fade-in">
+                    <label className="block text-zinc-400 text-[11px] font-semibold">
+                      Nombre de la Nueva Categoría:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: Contabilidad, Seguridad, Permisos Municipales..."
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                    />
+                    <span className="text-[10px] text-purple-400 block">
+                      ✨ Esta categoría quedará guardada permanentemente para futuros gastos.
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      if (e.target.value === '__NEW__') {
+                        setIsCreatingNewCategory(true);
+                      } else {
+                        setSelectedCategory(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500 font-semibold"
+                  >
+                    {allCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="__NEW__" className="text-purple-400 font-bold">
+                      ➕ + Crear otra categoría personalizada...
                     </option>
-                  ))}
-                </select>
+                  </select>
+                )}
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1 font-bold">Descripción / Motivo *</label>
+                <label className="block text-zinc-300 mb-1 font-bold">Descripción / Motivo *</label>
                 <input
                   type="text"
                   required
@@ -530,7 +672,7 @@ export default function AdminExpensesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-bold">Monto del Gasto ($) *</label>
+                  <label className="block text-zinc-300 mb-1 font-bold">Monto del Gasto ($) *</label>
                   <input
                     type="number"
                     min="1"
@@ -542,7 +684,7 @@ export default function AdminExpensesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-bold">Fecha de Pago</label>
+                  <label className="block text-zinc-300 mb-1 font-bold">Fecha de Pago</label>
                   <input
                     type="date"
                     required
@@ -554,14 +696,14 @@ export default function AdminExpensesPage() {
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1 font-bold">Medio de Pago de Salida</label>
+                <label className="block text-zinc-300 mb-1 font-bold">Medio de Pago de Salida</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('efectivo')}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       paymentMethod === 'efectivo'
-                        ? 'bg-emerald-950/60 border-emerald-500 text-white shadow-neon-purple'
+                        ? 'bg-emerald-950/60 border-emerald-500 text-white shadow-neon-emerald'
                         : 'bg-zinc-950 border-zinc-800 text-zinc-400'
                     }`}
                   >
@@ -576,13 +718,13 @@ export default function AdminExpensesPage() {
                         : 'bg-zinc-950 border-zinc-800 text-zinc-400'
                     }`}
                   >
-                    💳 Transferencia/Banco
+                    💳 Transferencia / Banco
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1 font-bold">N° Comprobante / Boleta (Opcional)</label>
+                <label className="block text-zinc-300 mb-1 font-bold">N° Comprobante / Boleta (Opcional)</label>
                 <input
                   type="text"
                   placeholder="Ej: BOL-12948"
