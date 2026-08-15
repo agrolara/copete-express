@@ -34,11 +34,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Crear directorio de datos persistente
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+
 COPY --from=builder /app/public ./public
 
 # Copiar artefactos del modo standalone de Next.js
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
 USER nextjs
 
