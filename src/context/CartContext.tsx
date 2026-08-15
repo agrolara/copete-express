@@ -1,8 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartItem, Product, Promotion, Sale, SaleItem } from '@/types';
-import { INITIAL_PRODUCTS, INITIAL_PROMOTIONS, INITIAL_SALES } from '@/lib/supabase';
+import { CartItem, Product, Promotion, Sale, SaleItem, Invoice, Expense, InvoiceItem } from '@/types';
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_PROMOTIONS,
+  INITIAL_SALES,
+  INITIAL_INVOICES,
+  INITIAL_EXPENSES,
+} from '@/lib/supabase';
 
 export interface BankDetails {
   banco: string;
@@ -28,10 +34,21 @@ interface CartContextType {
   products: Product[];
   promotions: Promotion[];
   sales: Sale[];
+  invoices: Invoice[];
+  expenses: Expense[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   setPromotions: React.Dispatch<React.SetStateAction<Promotion[]>>;
   setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
+  setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>;
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   deleteSale: (saleId: string, restoreStock?: boolean) => void;
+  addInvoice: (
+    invoiceData: Omit<Invoice, 'id' | 'created_at'>,
+    newProducts?: Product[]
+  ) => Promise<{ success: boolean; message: string }>;
+  deleteInvoice: (invoiceId: string, revertStock?: boolean) => void;
+  addExpense: (expenseData: Omit<Expense, 'id' | 'created_at'>) => Promise<{ success: boolean; message: string }>;
+  deleteExpense: (expenseId: string) => void;
   resetAllData: () => void;
   whatsappNumber: string;
   setWhatsappNumber: (num: string) => void;
@@ -60,6 +77,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [promotions, setPromotions] = useState<Promotion[]>(INITIAL_PROMOTIONS);
   const [sales, setSales] = useState<Sale[]>(INITIAL_SALES);
+  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
+  const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
 
   // Configuración de WhatsApp y Datos Bancarios editables por el Super Admin
   const [whatsappNumber, setWhatsappNumber] = useState<string>('56912345678');
@@ -81,6 +100,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.products) setProducts(data.products);
         if (data.promotions) setPromotions(data.promotions);
         if (data.sales) setSales(data.sales);
+        if (data.invoices) setInvoices(data.invoices);
+        if (data.expenses) setExpenses(data.expenses);
         if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
         if (data.bankDetails) setBankDetails(data.bankDetails);
       }
@@ -98,74 +119,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, []);
 
-  // Sincronizar el carrito de compras en tiempo real con el stock vivo de productos
-  useEffect(() => {
-    setCart((prevCart) => {
-      return prevCart
-        .map((item) => {
-          let realMax = 0;
-          if (item.type === 'product') {
-            const prod = products.find((p) => p.id === item.id);
-            realMax = prod ? prod.stock : 0;
-          } else {
-            const promo = promotions.find((p) => p.id === item.id);
-            if (promo && promo.items && promo.items.length > 0) {
-              const availablePacks = promo.items.map((pi) => {
-                const matchingProd = products.find((p) => p.id === pi.product_id);
-                if (!matchingProd || matchingProd.stock < pi.quantity) return 0;
-                return Math.floor(matchingProd.stock / pi.quantity);
-              });
-              realMax = Math.min(...availablePacks);
-            }
-          }
-
-          if (realMax <= 0) return null;
-          return {
-            ...item,
-            quantity: Math.min(item.quantity, realMax),
-            max_stock: realMax,
-          };
-        })
-        .filter(Boolean) as CartItem[];
-    });
-  }, [products, promotions]);
-
-  const updateWhatsappNumber = async (num: string) => {
-    const cleaned = num.replace(/[^0-9]/g, '');
-    setWhatsappNumber(cleaned);
-    try {
-      await fetch('/api/store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { whatsappNumber: cleaned } }),
-      });
-    } catch (e) {
-      console.error('Error enviando settings al servidor:', e);
-    }
-  };
-
-  const updateBankDetails = async (details: BankDetails) => {
-    setBankDetails(details);
-    try {
-      await fetch('/api/store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { bankDetails: details } }),
-      });
-    } catch (e) {
-      console.error('Error enviando bankDetails al servidor:', e);
-    }
-  };
-
-  // Revertir y eliminar venta (Devolver stock atrapado)
+  // Eliminar venta y opcionalmente restaurar el stock al catálogo
   const deleteSale = async (saleId: string, restoreStock: boolean = true) => {
-    const targetSale = sales.find((s) => s.id === saleId);
-    if (!targetSale) return;
-
+    const saleToDelete = sales.find((s) => s.id === saleId);
     let updatedProducts = [...products];
 
-    if (restoreStock && targetSale.items) {
-      targetSale.items.forEach((item) => {
+    if (saleToDelete && restoreStock && saleToDelete.items) {
+      saleToDelete.items.forEach((item) => {
         if (item.product_id) {
           const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
           if (pIdx > -1) {
@@ -199,16 +159,165 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await fetch('/api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'DELETE_SALE', payload: { saleId, updatedProducts: restoreStock ? updatedProducts : null } }),
+        body: JSON.stringify({
+          action: 'DELETE_SALE',
+          payload: { saleId, updatedProducts: restoreStock ? updatedProducts : null },
+        }),
       });
     } catch (e) {
       console.error('Error enviando deleteSale al servidor:', e);
     }
   };
 
+  // 1. INGRESO DE FACTURA DE COMPRA DE PROVEEDOR E INVENTARIO
+  const addInvoice = async (
+    invoiceData: Omit<Invoice, 'id' | 'created_at'>,
+    newProducts: Product[] = []
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const invoiceId = `inv-${Date.now()}`;
+      const newInvoice: Invoice = {
+        ...invoiceData,
+        id: invoiceId,
+        created_at: new Date().toISOString(),
+      };
+
+      // Clonar lista de productos
+      let updatedProducts = [...products];
+
+      // Si hay productos nuevos creados en la factura, incorporarlos
+      if (newProducts.length > 0) {
+        newProducts.forEach((newP) => {
+          if (!updatedProducts.some((p) => p.id === newP.id)) {
+            updatedProducts.push(newP);
+          }
+        });
+      }
+
+      // Actualizar stock y costo unitario de cada ítem de la factura
+      newInvoice.items.forEach((item) => {
+        const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+        if (pIdx > -1) {
+          updatedProducts[pIdx] = {
+            ...updatedProducts[pIdx],
+            stock: updatedProducts[pIdx].stock + item.quantity,
+            cost_price: item.cost_price, // Actualizar costo con la factura
+            price: item.selling_price || updatedProducts[pIdx].price,
+          };
+        }
+      });
+
+      setProducts(updatedProducts);
+      setInvoices((prev) => [newInvoice, ...prev]);
+
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_INVOICE',
+          payload: { invoice: newInvoice, updatedProducts },
+        }),
+      });
+
+      return {
+        success: true,
+        message: '¡Factura ingresada con éxito! El inventario y los costos han sido actualizados.',
+      };
+    } catch (e: any) {
+      console.error('Error procesando factura:', e);
+      return { success: false, message: e.message || 'Error al ingresar factura.' };
+    }
+  };
+
+  // Eliminar Factura y opcionalmente revertir el stock sumado
+  const deleteInvoice = async (invoiceId: string, revertStock: boolean = true) => {
+    const invToDelete = invoices.find((i) => i.id === invoiceId);
+    let updatedProducts = [...products];
+
+    if (invToDelete && revertStock) {
+      invToDelete.items.forEach((item) => {
+        const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+        if (pIdx > -1) {
+          updatedProducts[pIdx] = {
+            ...updatedProducts[pIdx],
+            stock: Math.max(0, updatedProducts[pIdx].stock - item.quantity),
+          };
+        }
+      });
+      setProducts(updatedProducts);
+    }
+
+    setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_INVOICE',
+          payload: { invoiceId, updatedProducts: revertStock ? updatedProducts : null },
+        }),
+      });
+    } catch (e) {
+      console.error('Error eliminando factura:', e);
+    }
+  };
+
+  // 2. GESTIÓN DE GASTOS OPERACIONALES
+  const addExpense = async (
+    expenseData: Omit<Expense, 'id' | 'created_at'>
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const expenseId = `exp-${Date.now()}`;
+      const newExpense: Expense = {
+        ...expenseData,
+        id: expenseId,
+        created_at: new Date().toISOString(),
+      };
+
+      setExpenses((prev) => [newExpense, ...prev]);
+
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_EXPENSE',
+          payload: { expense: newExpense },
+        }),
+      });
+
+      return {
+        success: true,
+        message: '¡Gasto operacional registrado con éxito!',
+      };
+    } catch (e: any) {
+      console.error('Error registrando gasto:', e);
+      return { success: false, message: e.message || 'Error al registrar gasto.' };
+    }
+  };
+
+  const deleteExpense = async (expenseId: string) => {
+    setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_EXPENSE',
+          payload: { expenseId },
+        }),
+      });
+    } catch (e) {
+      console.error('Error eliminando gasto:', e);
+    }
+  };
+
   const resetAllData = async () => {
     setProducts(INITIAL_PRODUCTS);
     setSales(INITIAL_SALES);
+    setInvoices(INITIAL_INVOICES);
+    setExpenses(INITIAL_EXPENSES);
     try {
       await fetch('/api/store', {
         method: 'POST',
@@ -250,25 +359,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const updated = [...prevCart];
         updated[existingIndex] = { ...existing, quantity: newQty, max_stock: maxStock };
         return updated;
-      } else {
-        const price = type === 'product' ? (item as Product).price : (item as Promotion).promo_price;
-        return [
-          ...prevCart,
-          {
-            id: item.id,
-            type,
-            name: item.name,
-            price,
-            image_url: item.image_url,
-            quantity: 1,
-            max_stock: maxStock,
-            items_summary: itemsSummary,
-          },
-        ];
       }
+      return [
+        ...prevCart,
+        {
+          id: item.id,
+          type,
+          name: item.name,
+          price: type === 'product' ? (item as Product).price : (item as Promotion).promo_price,
+          image_url: item.image_url,
+          quantity: 1,
+          max_stock: maxStock,
+          items_summary: itemsSummary,
+        },
+      ];
     });
-
-    setIsCartOpen(true);
   };
 
   const removeFromCart = (id: string) => {
@@ -280,34 +385,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       removeFromCart(id);
       return;
     }
-
     setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.id === id) {
-            let realMax = item.max_stock;
-            if (item.type === 'product') {
-              const prod = products.find((p) => p.id === item.id);
-              if (prod) realMax = prod.stock;
-            } else {
-              const promo = promotions.find((p) => p.id === item.id);
-              if (promo && promo.items && promo.items.length > 0) {
-                const availablePacks = promo.items.map((pi) => {
-                  const matchingProd = products.find((p) => p.id === pi.product_id);
-                  if (!matchingProd || matchingProd.stock < pi.quantity) return 0;
-                  return Math.floor(matchingProd.stock / pi.quantity);
-                });
-                realMax = Math.min(...availablePacks);
-              }
-            }
-
-            if (realMax <= 0) return null;
-            const validQty = Math.min(quantity, realMax);
-            return { ...item, quantity: validQty, max_stock: realMax };
-          }
-          return item;
-        })
-        .filter(Boolean) as CartItem[]
+      prev.map((item) => {
+        if (item.id === id) {
+          const clampedQty = Math.min(quantity, item.max_stock);
+          return { ...item, quantity: clampedQty };
+        }
+        return item;
+      })
     );
   };
 
@@ -318,7 +403,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Proceso de Checkout Público del Cliente
+  // Proceso de Checkout y Guardado Centralizado de Ventas
   const processCheckout = async (
     customerName: string,
     customerPhone: string,
@@ -326,20 +411,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod: PaymentMethod = 'transferencia'
   ): Promise<{ success: boolean; message: string }> => {
     if (cart.length === 0) {
-      return { success: false, message: 'El carrito de compras está vacío.' };
+      return { success: false, message: 'El carrito está vacío.' };
     }
 
     const updatedProducts = [...products];
-    const saleItemsList: SaleItem[] = [];
     let calculatedTotal = 0;
+    const saleItemsList: SaleItem[] = [];
 
+    // Validar y descontar stock
     for (const item of cart) {
       if (item.type === 'product') {
         const pIndex = updatedProducts.findIndex((p) => p.id === item.id);
         if (pIndex === -1 || updatedProducts[pIndex].stock < item.quantity) {
           return {
             success: false,
-            message: `Stock insuficiente para ${item.name}.`,
+            message: `Stock insuficiente para el producto ${item.name}.`,
           };
         }
         updatedProducts[pIndex] = {
@@ -352,6 +438,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           product_id: item.id,
           quantity: item.quantity,
           unit_price: item.price,
+          cost_price: updatedProducts[pIndex].cost_price || Math.round(item.price * 0.6),
           item_name: item.name,
         });
         calculatedTotal += item.price * item.quantity;
@@ -379,6 +466,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           promotion_id: item.id,
           quantity: item.quantity,
           unit_price: item.price,
+          cost_price: Math.round(item.price * 0.6),
           item_name: item.name,
         });
         calculatedTotal += item.price * item.quantity;
@@ -392,6 +480,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       customer_name: customerName,
       customer_phone: customerPhone,
       delivery_address: deliveryAddress,
+      payment_method: paymentMethod,
       total_amount: calculatedTotal,
       status: 'completed',
       created_at: new Date().toISOString(),
@@ -451,59 +540,66 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...prod,
           stock: prod.stock - item.quantity,
         };
-        const itemTotal = prod.price * item.quantity;
-        totalOrderPrice += itemTotal;
-        itemLines.push(`• ${item.quantity}x ${prod.name} - $${itemTotal.toLocaleString('es-CL')}`);
+
+        const itemSubtotal = prod.price * item.quantity;
+        totalOrderPrice += itemSubtotal;
+        itemLines.push(`• ${item.quantity}x ${prod.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
           product_id: prod.id,
           quantity: item.quantity,
           unit_price: prod.price,
+          cost_price: prod.cost_price || Math.round(prod.price * 0.6),
           item_name: prod.name,
         });
       } else {
-        const promo = promotions.find((p) => p.id === item.id);
-        if (!promo) continue;
-
-        if (promo.items) {
+        const promoIndex = promotions.findIndex((p) => p.id === item.id);
+        if (promoIndex === -1) {
+          return { success: false, message: 'Promoción no encontrada.', summaryText: '' };
+        }
+        const promo = promotions[promoIndex];
+        if (promo.items && promo.items.length > 0) {
           for (const pi of promo.items) {
-            const prodIndex = updatedProducts.findIndex((p) => p.id === pi.product_id);
+            const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
             const needed = pi.quantity * item.quantity;
-            if (prodIndex === -1 || updatedProducts[prodIndex].stock < needed) {
+            if (pIdx === -1 || updatedProducts[pIdx].stock < needed) {
               return {
                 success: false,
-                message: `Stock insuficiente del producto en la promo ${promo.name}.`,
+                message: `Stock insuficiente para armar ${promo.name}.`,
                 summaryText: '',
               };
             }
-            updatedProducts[prodIndex] = {
-              ...updatedProducts[prodIndex],
-              stock: updatedProducts[prodIndex].stock - needed,
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              stock: updatedProducts[pIdx].stock - needed,
             };
           }
         }
-        const itemTotal = promo.promo_price * item.quantity;
-        totalOrderPrice += itemTotal;
-        itemLines.push(`• ${item.quantity}x ${promo.name} - $${itemTotal.toLocaleString('es-CL')}`);
+
+        const itemSubtotal = promo.promo_price * item.quantity;
+        totalOrderPrice += itemSubtotal;
+        itemLines.push(`• ${item.quantity}x ${promo.name} (Pack) - $${itemSubtotal.toLocaleString('es-CL')}`);
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
           promotion_id: promo.id,
           quantity: item.quantity,
           unit_price: promo.promo_price,
+          cost_price: Math.round(promo.promo_price * 0.6),
           item_name: promo.name,
         });
       }
     }
 
-    // REGISTRAR VENTA EN EL SERVIDOR CENTRALIZADO
+    const orderId = `ADM-${Math.floor(1000 + Math.random() * 9000)}`;
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
       customer_name: customerName,
       customer_phone: customerPhone,
       delivery_address: deliveryAddress,
+      payment_method: paymentMethod,
       total_amount: totalOrderPrice,
       status: 'completed',
       created_at: new Date().toISOString(),
@@ -520,43 +616,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ action: 'ADD_SALE', payload: { sale: newSale, updatedProducts } }),
       });
     } catch (e) {
-      console.error('Error enviando pedido admin al servidor:', e);
+      console.error('Error enviando nueva venta manual al servidor:', e);
     }
 
-    const formattedTotal = new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-      maximumFractionDigits: 0,
-    }).format(totalOrderPrice);
+    // Generar resumen para WhatsApp
+    let summary = `🍻 *COPETE EXPRESS - RESUMEN DE TU PEDIDO #${orderId}* 🍻\n\n`;
+    summary += `👤 *Cliente:* ${customerName}\n`;
+    summary += `📞 *Teléfono:* ${customerPhone}\n`;
+    summary += `📍 *Dirección de Entrega:* ${deliveryAddress}\n\n`;
+    summary += `📋 *DETALLE DEL PEDIDO:*\n`;
+    summary += itemLines.join('\n') + '\n\n';
+    summary += `💰 *TOTAL A PAGAR: $${totalOrderPrice.toLocaleString('es-CL')}*\n`;
+    summary += `💳 *Forma de Pago:* ${paymentMethod === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo al Recibir'}\n\n`;
 
-    let paymentDetailsText = '';
     if (paymentMethod === 'transferencia') {
-      paymentDetailsText = `💳 *DATOS PARA TRANSFERENCIA BANCARIA:*\n` +
-        `• *Banco:* ${bankDetails.banco}\n` +
-        `• *Tipo de Cuenta:* ${bankDetails.tipoCuenta}\n` +
-        `• *N° Cuenta:* ${bankDetails.numeroCuenta}\n` +
-        `• *RUT:* ${bankDetails.rut}\n` +
-        `• *Nombre Titular:* ${bankDetails.nombre}\n` +
-        `• *Correo:* ${bankDetails.email}\n` +
-        `📌 *Por favor envía el comprobante de transferencia a este chat para enviar tu pedido inmediatamente.*`;
+      summary += `🏦 *DATOS PARA TRANSFERENCIA BANCARIA:*\n`;
+      summary += `• *Banco:* ${bankDetails.banco}\n`;
+      summary += `• *Tipo de Cuenta:* ${bankDetails.tipoCuenta}\n`;
+      summary += `• *Número:* ${bankDetails.numeroCuenta}\n`;
+      summary += `• *RUT:* ${bankDetails.rut}\n`;
+      summary += `• *Nombre:* ${bankDetails.nombre}\n`;
+      summary += `• *Correo de Confirmación:* ${bankDetails.email}\n\n`;
+      summary += `⚠️ _Por favor reenvía el comprobante de transferencia a este chat para enviar al repartidor de inmediato._ 🚀`;
     } else {
-      paymentDetailsText = `💵 *FORMA DE PAGO SELECCIONADA:* Efectivo al Recibir en Domicilio.\n` +
-        `📌 *El repartidor cobrará exactamente ${formattedTotal} al entregar.*`;
+      summary += `💵 _Recuerda tener el efectivo listo al momento de la entrega._ 🚀`;
     }
-
-    const summaryText = `🍹 *RESUMEN DE TU PEDIDO - COPETE EXPRESS*\n\n` +
-      `👤 *Cliente:* ${customerName}\n` +
-      `📱 *Teléfono:* ${customerPhone}\n` +
-      `📍 *Dirección de Despacho:* ${deliveryAddress}\n\n` +
-      `🛒 *PRODUCTOS SOLICITADOS:*\n${itemLines.join('\n')}\n\n` +
-      `💰 *TOTAL A PAGAR:* ${formattedTotal}\n\n` +
-      `${paymentDetailsText}\n\n` +
-      `🚀 *Tiempo estimado de entrega:* 30 a 45 minutos. ¡Muchas gracias por elegir Copete Express!`;
 
     return {
       success: true,
-      message: '¡Pedido registrado con éxito e inventario descontado!',
-      summaryText,
+      message: '¡Pedido manual generado y stock descontado con éxito!',
+      summaryText: summary,
     };
   };
 
@@ -575,15 +664,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         products,
         promotions,
         sales,
+        invoices,
+        expenses,
         setProducts,
         setPromotions,
         setSales,
+        setInvoices,
+        setExpenses,
         deleteSale,
+        addInvoice,
+        deleteInvoice,
+        addExpense,
+        deleteExpense,
         resetAllData,
         whatsappNumber,
-        setWhatsappNumber: updateWhatsappNumber,
+        setWhatsappNumber,
         bankDetails,
-        setBankDetails: updateBankDetails,
+        setBankDetails,
         processCheckout,
         createAdminOrder,
       }}
@@ -596,7 +693,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useCart = () => {
   const context = useContext(CartContext);
   if (!context) {
-    throw new Error('useCart debe utilizarse dentro de un CartProvider');
+    throw new Error('useCart debe usarse dentro de un CartProvider');
   }
   return context;
 };

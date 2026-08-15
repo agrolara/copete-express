@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { Product } from '@/types';
 import { SquareImageContainer } from '@/components/ui/SquareImageContainer';
@@ -17,6 +18,7 @@ import {
   Package,
   DollarSign,
   TrendingUp,
+  FileText,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
@@ -121,17 +123,27 @@ export default function AdminProductsPage() {
             Gestión de Productos e Inventario
           </h1>
           <p className="text-xs text-zinc-400">
-            Administra precios de venta, costos unitarios, margen bruto y existencias en tiempo real.
+            Administra catálogo, costos y existencias. Utiliza <strong>Ingresar por Factura</strong> como método principal de abastecimiento.
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-purple hover:opacity-95 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Nuevo Producto</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/admin/invoices"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all border border-emerald-400/30"
+          >
+            <FileText className="w-4 h-4" />
+            <span>📦 Ingresar por Factura (Principal)</span>
+          </Link>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white font-bold text-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Crear Producto Manual</span>
+          </button>
+        </div>
       </div>
 
       {/* Barra de Búsqueda */}

@@ -14,7 +14,7 @@ export interface Product {
   description: string;
   category: string;
   price: number;
-  cost_price?: number; // Costo unitario para cálculo de márgenes y ganancias
+  cost_price?: number; // Costo unitario de adquisición para cálculo de márgenes y utilidades
   stock: number;
   image_url: string;
   is_active: boolean;
@@ -69,10 +69,70 @@ export interface Sale {
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
+  payment_method?: 'transferencia' | 'efectivo';
   total_amount: number;
   status: 'pending' | 'completed' | 'cancelled';
   created_at: string;
   items?: SaleItem[];
+}
+
+// 1. ESTRUCTURAS PARA INGRESO DE FACTURAS DE COMPRA E INVENTARIO
+export interface InvoiceItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  category?: string;
+  quantity: number;
+  cost_price: number;       // Valor unitario de costo neto de la factura
+  total_cost: number;       // quantity * cost_price
+  selling_price?: number;   // Precio de venta sugerido al público
+  is_new_product?: boolean; // Indica si se creó un nuevo ítem en el catálogo
+}
+
+export interface Invoice {
+  id: string;
+  invoice_number: string;   // Número de Factura / Folio
+  supplier_name: string;    // Emisor / Proveedor (ej: Distribuidora CCU, Concha y Toro, etc.)
+  supplier_rut?: string;    // RUT del proveedor
+  invoice_date: string;     // Fecha de emisión de la factura
+  created_at: string;       // Fecha de registro en el sistema
+  payment_method: 'transferencia' | 'efectivo'; // Forma de pago de la factura
+  total_amount: number;     // Total de la factura
+  items: InvoiceItem[];     // Detalle de productos de la factura
+  notes?: string;
+}
+
+// 2. ESTRUCTURAS PARA GASTOS OPERACIONALES
+export type ExpenseCategoryType =
+  | 'Arriendo'
+  | 'Sueldos y Turnos'
+  | 'Servicios Básicos (Luz/Agua/Internet)'
+  | 'Bolsas y Empaques'
+  | 'Combustible y Flete Delivery'
+  | 'Publicidad y Marketing'
+  | 'Mantenimiento y Reparaciones'
+  | 'Otros Gastos';
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: ExpenseCategoryType | string;
+  description: string;
+  amount: number;
+  payment_method: 'efectivo' | 'transferencia'; // De dónde salió el dinero (Caja física o Banco)
+  receipt_number?: string; // Boleta/Factura del gasto
+  created_at: string;
+}
+
+// 3. RESUMEN Y ARQUEO DE CAJA
+export interface CashSummary {
+  cashInHand: number;      // Efectivo en caja física
+  bankTransfer: number;    // Dinero en banco por transferencias
+  totalAvailable: number;  // Saldo total disponible
+  salesCash: number;       // Ingresos por ventas en efectivo
+  salesTransfer: number;   // Ingresos por ventas en transferencia
+  expensesCash: number;    // Egresos por gastos en efectivo
+  expensesTransfer: number;// Egresos por gastos en transferencia
 }
 
 export interface SalesByDayOfWeek {

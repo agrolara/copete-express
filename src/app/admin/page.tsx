@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useCart, PaymentMethod } from '@/context/CartContext';
 import {
   DollarSign,
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   PackageCheck,
   ShoppingBag,
@@ -28,6 +30,10 @@ import {
   BarChart3,
   Layers,
   ArrowUpRight,
+  ArrowDownRight,
+  FileText,
+  Wallet,
+  Receipt,
 } from 'lucide-react';
 import {
   BarChart,
@@ -41,8 +47,6 @@ import {
   Cell,
   CartesianGrid,
   Legend,
-  AreaChart,
-  Area,
 } from 'recharts';
 
 type TimeRangeFilter = 'day' | 'week' | 'month' | 'all';
@@ -52,6 +56,8 @@ export default function AdminDashboardPage() {
     products,
     promotions,
     sales,
+    invoices,
+    expenses,
     setProducts,
     whatsappNumber,
     setWhatsappNumber,
@@ -100,6 +106,12 @@ export default function AdminDashboardPage() {
       monthsSet.add(monthKey);
     });
 
+    expenses.forEach((e) => {
+      const d = new Date(e.created_at || e.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthsSet.add(monthKey);
+    });
+
     return Array.from(monthsSet)
       .sort()
       .reverse()
@@ -109,7 +121,7 @@ export default function AdminDashboardPage() {
         const label = dateObj.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
         return { key, label: label.charAt(0).toUpperCase() + label.slice(1) };
       });
-  }, [sales]);
+  }, [sales, expenses]);
 
   // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes Específico, Todo)
   const filteredSales = useMemo(() => {
@@ -140,7 +152,6 @@ export default function AdminDashboardPage() {
             saleDate.getMonth() + 1 === targetMonth
           );
         }
-        // Mes actual por defecto
         return (
           saleDate.getMonth() === now.getMonth() &&
           saleDate.getFullYear() === now.getFullYear()
@@ -151,7 +162,46 @@ export default function AdminDashboardPage() {
     });
   }, [sales, timeRange, selectedMonth]);
 
-  // 2. MÉTRICAS FINANCIERAS Y ANÁLISIS DE COSTOS, MÁRGENES Y GANANCIA NETA
+  // 2. FILTRADO TEMPORAL DE GASTOS
+  const filteredExpenses = useMemo(() => {
+    const now = new Date();
+
+    return expenses.filter((exp) => {
+      const expDate = new Date(exp.created_at || exp.date);
+
+      if (timeRange === 'day') {
+        return (
+          expDate.getDate() === now.getDate() &&
+          expDate.getMonth() === now.getMonth() &&
+          expDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'week') {
+        const diffTime = Math.abs(now.getTime() - expDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 7;
+      }
+
+      if (timeRange === 'month') {
+        if (selectedMonth && selectedMonth !== 'all' && selectedMonth !== 'current') {
+          const [targetYear, targetMonth] = selectedMonth.split('-').map(Number);
+          return (
+            expDate.getFullYear() === targetYear &&
+            expDate.getMonth() + 1 === targetMonth
+          );
+        }
+        return (
+          expDate.getMonth() === now.getMonth() &&
+          expDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      return true; // 'all'
+    });
+  }, [expenses, timeRange, selectedMonth]);
+
+  // 3. MÉTRICAS FINANCIERAS COMPLETAS: VENTAS, COSTOS DE MERCADERÍA, GASTOS OPERACIONALES Y UTILIDAD NETA REAL
   const financialMetrics = useMemo(() => {
     let totalRevenue = 0;
     let totalCost = 0;
@@ -181,44 +231,74 @@ export default function AdminDashboardPage() {
       });
     });
 
-    const netProfit = totalRevenue - totalCost;
-    const marginPct = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const grossProfit = totalRevenue - totalCost;
+    const realNetProfit = grossProfit - totalExpenses;
+    const realMarginPct = totalRevenue > 0 ? Math.round((realNetProfit / totalRevenue) * 100) : 0;
 
     return {
       totalRevenue,
       totalCost,
-      netProfit,
-      marginPct,
+      totalExpenses,
+      grossProfit,
+      realNetProfit,
+      realMarginPct,
     };
-  }, [filteredSales, products, promotions]);
+  }, [filteredSales, filteredExpenses, products, promotions]);
 
-  const formattedRevenue = new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(financialMetrics.totalRevenue);
+  // 4. ARQUEO DE CAJA EN TIEMPO REAL: EFECTIVO VS TRANSFERENCIA
+  const cashMetrics = useMemo(() => {
+    let salesCash = 0;
+    let salesTransfer = 0;
 
-  const formattedCost = new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(financialMetrics.totalCost);
+    filteredSales.forEach((s) => {
+      if (s.payment_method === 'efectivo') {
+        salesCash += s.total_amount;
+      } else {
+        salesTransfer += s.total_amount;
+      }
+    });
 
-  const formattedProfit = new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(financialMetrics.netProfit);
+    let expensesCash = 0;
+    let expensesTransfer = 0;
 
-  // 3. DATOS DE GRÁFICO: Días / Período más vendidas vs costos
-  const daysOfWeekMap: { [key: string]: { ventas: number; costos: number; ganancia: number } } = {
-    Lun: { ventas: 0, costos: 0, ganancia: 0 },
-    Mar: { ventas: 0, costos: 0, ganancia: 0 },
-    Mié: { ventas: 0, costos: 0, ganancia: 0 },
-    Jue: { ventas: 0, costos: 0, ganancia: 0 },
-    Vie: { ventas: 0, costos: 0, ganancia: 0 },
-    Sáb: { ventas: 0, costos: 0, ganancia: 0 },
-    Dom: { ventas: 0, costos: 0, ganancia: 0 },
+    filteredExpenses.forEach((e) => {
+      if (e.payment_method === 'efectivo') {
+        expensesCash += e.amount;
+      } else {
+        expensesTransfer += e.amount;
+      }
+    });
+
+    const netCashInHand = salesCash - expensesCash;
+    const netBankTransfer = salesTransfer - expensesTransfer;
+    const totalAvailable = netCashInHand + netBankTransfer;
+
+    return {
+      salesCash,
+      salesTransfer,
+      expensesCash,
+      expensesTransfer,
+      netCashInHand,
+      netBankTransfer,
+      totalAvailable,
+    };
+  }, [filteredSales, filteredExpenses]);
+
+  const formattedRevenue = `$${financialMetrics.totalRevenue.toLocaleString('es-CL')}`;
+  const formattedCost = `$${financialMetrics.totalCost.toLocaleString('es-CL')}`;
+  const formattedExpenses = `$${financialMetrics.totalExpenses.toLocaleString('es-CL')}`;
+  const formattedProfit = `$${financialMetrics.realNetProfit.toLocaleString('es-CL')}`;
+
+  // 5. DATOS DE GRÁFICO COMPARATIVO POR DÍAS (Ventas vs Costos vs Gastos vs Utilidad)
+  const daysOfWeekMap: { [key: string]: { ventas: number; costos: number; gastos: number; ganancia: number } } = {
+    Lun: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Mar: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Mié: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Jue: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Vie: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Sáb: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
+    Dom: { ventas: 0, costos: 0, gastos: 0, ganancia: 0 },
   };
 
   filteredSales.forEach((s) => {
@@ -240,44 +320,27 @@ export default function AdminDashboardPage() {
     }
   });
 
-  const chartFinancialData = [
-    { day: 'Lun', Ventas: daysOfWeekMap['Lun'].ventas, Costos: daysOfWeekMap['Lun'].costos, Ganancia: daysOfWeekMap['Lun'].ganancia },
-    { day: 'Mar', Ventas: daysOfWeekMap['Mar'].ventas, Costos: daysOfWeekMap['Mar'].costos, Ganancia: daysOfWeekMap['Mar'].ganancia },
-    { day: 'Mié', Ventas: daysOfWeekMap['Mié'].ventas, Costos: daysOfWeekMap['Mié'].costos, Ganancia: daysOfWeekMap['Mié'].ganancia },
-    { day: 'Jue', Ventas: daysOfWeekMap['Jue'].ventas, Costos: daysOfWeekMap['Jue'].costos, Ganancia: daysOfWeekMap['Jue'].ganancia },
-    { day: 'Vie', Ventas: daysOfWeekMap['Vie'].ventas, Costos: daysOfWeekMap['Vie'].costos, Ganancia: daysOfWeekMap['Vie'].ganancia },
-    { day: 'Sáb', Ventas: daysOfWeekMap['Sáb'].ventas, Costos: daysOfWeekMap['Sáb'].costos, Ganancia: daysOfWeekMap['Sáb'].ganancia },
-    { day: 'Dom', Ventas: daysOfWeekMap['Dom'].ventas, Costos: daysOfWeekMap['Dom'].costos, Ganancia: daysOfWeekMap['Dom'].ganancia },
-  ];
-
-  // 4. ANÁLISIS DE PRODUCTOS, MÁRGENES Y UNIDADES
-  const productMarginMap: { [name: string]: { ventas: number; costos: number; ganancia: number; unidades: number } } = {};
-  filteredSales.forEach((s) => {
-    s.items?.forEach((item) => {
-      if (!productMarginMap[item.item_name]) {
-        productMarginMap[item.item_name] = { ventas: 0, costos: 0, ganancia: 0, unidades: 0 };
-      }
-      const prod = products.find((p) => p.id === item.product_id);
-      const costUnit = prod?.cost_price || Math.round(item.unit_price * 0.6);
-      const itemCost = costUnit * item.quantity;
-      const itemRev = item.unit_price * item.quantity;
-
-      productMarginMap[item.item_name].ventas += itemRev;
-      productMarginMap[item.item_name].costos += itemCost;
-      productMarginMap[item.item_name].ganancia += itemRev - itemCost;
-      productMarginMap[item.item_name].unidades += item.quantity;
-    });
+  filteredExpenses.forEach((e) => {
+    const date = new Date(e.created_at || e.date);
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const dayName = dayNames[date.getDay()];
+    if (daysOfWeekMap[dayName]) {
+      daysOfWeekMap[dayName].gastos += e.amount;
+      daysOfWeekMap[dayName].ganancia -= e.amount;
+    }
   });
 
-  const productMarginData = Object.keys(productMarginMap).map((name) => ({
-    name: name.length > 16 ? name.substring(0, 16) + '...' : name,
-    Ventas: productMarginMap[name].ventas,
-    Costos: productMarginMap[name].costos,
-    Ganancia: productMarginMap[name].ganancia,
-    Unidades: productMarginMap[name].unidades,
-  }));
+  const chartFinancialData = [
+    { day: 'Lun', Ventas: daysOfWeekMap['Lun'].ventas, Costos: daysOfWeekMap['Lun'].costos, Gastos: daysOfWeekMap['Lun'].gastos, Utilidad: daysOfWeekMap['Lun'].ganancia },
+    { day: 'Mar', Ventas: daysOfWeekMap['Mar'].ventas, Costos: daysOfWeekMap['Mar'].costos, Gastos: daysOfWeekMap['Mar'].gastos, Utilidad: daysOfWeekMap['Mar'].ganancia },
+    { day: 'Mié', Ventas: daysOfWeekMap['Mié'].ventas, Costos: daysOfWeekMap['Mié'].costos, Gastos: daysOfWeekMap['Mié'].gastos, Utilidad: daysOfWeekMap['Mié'].ganancia },
+    { day: 'Jue', Ventas: daysOfWeekMap['Jue'].ventas, Costos: daysOfWeekMap['Jue'].costos, Gastos: daysOfWeekMap['Jue'].gastos, Utilidad: daysOfWeekMap['Jue'].ganancia },
+    { day: 'Vie', Ventas: daysOfWeekMap['Vie'].ventas, Costos: daysOfWeekMap['Vie'].costos, Gastos: daysOfWeekMap['Vie'].gastos, Utilidad: daysOfWeekMap['Vie'].ganancia },
+    { day: 'Sáb', Ventas: daysOfWeekMap['Sáb'].ventas, Costos: daysOfWeekMap['Sáb'].costos, Gastos: daysOfWeekMap['Sáb'].gastos, Utilidad: daysOfWeekMap['Sáb'].ganancia },
+    { day: 'Dom', Ventas: daysOfWeekMap['Dom'].ventas, Costos: daysOfWeekMap['Dom'].costos, Gastos: daysOfWeekMap['Dom'].gastos, Utilidad: daysOfWeekMap['Dom'].ganancia },
+  ];
 
-  // 5. Salud de Stock
+  // 6. Salud de Stock
   const healthyCount = products.filter((p) => p.stock >= 3).length;
   const criticalCount = products.filter((p) => p.stock > 0 && p.stock < 3).length;
   const outOfStockCount = products.filter((p) => p.stock === 0).length;
@@ -374,10 +437,10 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Dashboard Administrador & Analítica Financiera
+            Dashboard Administrador & Control Financiero
           </h1>
           <p className="text-xs text-zinc-400">
-            Control de Ventas, Costos Unitarios, Márgenes de Ganancia Neta y Gestión de Pedidos por WhatsApp.
+            Control de Ventas, Costos, Gastos Operacionales, Arqueo de Caja (Efectivo/Transferencia) e Ingreso de Facturas.
           </p>
         </div>
 
@@ -392,7 +455,7 @@ export default function AdminDashboardPage() {
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              Hoy (Por Día)
+              Hoy (Día)
             </button>
             <button
               onClick={() => setTimeRange('week')}
@@ -433,7 +496,7 @@ export default function AdminDashboardPage() {
               }}
               className="px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-xs font-bold text-white focus:outline-none focus:border-purple-500 cursor-pointer"
             >
-              <option value="all">📅 Seleccionar Mes Anterior...</option>
+              <option value="all">📅 Mes Anterior...</option>
               {availableMonths.map((m) => (
                 <option key={m.key} value={m.key}>
                   {m.label}
@@ -452,9 +515,17 @@ export default function AdminDashboardPage() {
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              Histórico Todo
+              Todo
             </button>
           </div>
+
+          <Link
+            href="/admin/invoices"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs shadow-md hover:opacity-95 transition-all"
+          >
+            <FileText className="w-4 h-4" />
+            <span>+ Ingresar Factura</span>
+          </Link>
 
           <button
             onClick={() => {
@@ -462,19 +533,18 @@ export default function AdminDashboardPage() {
               setSelectedItems({});
               setIsOrderModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all border border-emerald-400/30"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all"
           >
             <MessageSquare className="w-4 h-4" />
-            <span>+ Crear Pedido WhatsApp</span>
+            <span>+ Pedido WhatsApp</span>
           </button>
 
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 transition-colors"
-            title="Configurar WhatsApp y Datos Bancarios"
+            className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            title="Ajustes de WhatsApp y Banco"
           >
             <Settings className="w-4 h-4 text-purple-400" />
-            <span>Ajustes</span>
           </button>
         </div>
       </div>
@@ -495,10 +565,17 @@ export default function AdminDashboardPage() {
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-300">
-                  Menos de 3 unidades en bodega. Reabastece con 1 clic:
+                  Menos de 3 unidades en bodega. Reabastece con 1 clic o ingresa factura:
                 </p>
               </div>
             </div>
+            <Link
+              href="/admin/invoices"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Ingresar Factura</span>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -526,15 +603,15 @@ export default function AdminDashboardPage() {
         </section>
       )}
 
-      {/* TARJETAS DE ANALÍTICA FINANCIERA: VENTAS, COSTOS, GANANCIA NETA Y MARGEN */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* TARJETAS DE ANALÍTICA FINANCIERA: VENTAS, COSTOS, GASTOS, GANANCIA NETA REAL Y MARGEN */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Ventas Totales */}
         <div className="p-5 rounded-2xl bg-zinc-900/90 border border-purple-500/30 flex items-center justify-between shadow-neon-purple">
           <div>
             <span className="text-xs font-semibold text-zinc-400">Ventas Totales</span>
             <h3 className="text-2xl font-black text-white mt-1">{formattedRevenue}</h3>
             <span className="text-[10px] text-purple-400 font-bold block mt-1">
-              {filteredSales.length} Transacciones filtradas
+              {filteredSales.length} Transacciones
             </span>
           </div>
           <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
@@ -542,25 +619,44 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Costo Total de Ventas */}
+        {/* Costo Mercadería */}
         <div className="p-5 rounded-2xl bg-zinc-900/90 border border-orange-500/30 flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Costo Total de Ventas</span>
+            <span className="text-xs font-semibold text-zinc-400">Costo de Mercadería</span>
             <h3 className="text-2xl font-black text-orange-400 mt-1">{formattedCost}</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Costo unitario acumulado</span>
+            <span className="text-[10px] text-zinc-500 block mt-1">Costo compras vendido</span>
           </div>
           <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
             <Layers className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Ganancia Neta (Ventas - Costos) */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-between shadow-lg">
+        {/* Gastos Operacionales */}
+        <Link
+          href="/admin/expenses"
+          className="p-5 rounded-2xl bg-zinc-900/90 border border-red-500/30 hover:border-red-500/60 flex items-center justify-between transition-all group"
+        >
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Ganancia Neta (Utilidad)</span>
+            <span className="text-xs font-semibold text-zinc-400 group-hover:text-red-300">
+              Gastos Operacionales
+            </span>
+            <h3 className="text-2xl font-black text-red-400 mt-1">{formattedExpenses}</h3>
+            <span className="text-[10px] text-red-400/80 font-bold block mt-1">
+              {filteredExpenses.length} egresos clasificados →
+            </span>
+          </div>
+          <div className="p-3 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30">
+            <TrendingDown className="w-6 h-6" />
+          </div>
+        </Link>
+
+        {/* Utilidad Neta Real (Ventas - Costos - Gastos) */}
+        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-emerald-500/40 flex items-center justify-between shadow-lg shadow-emerald-950/40">
+          <div>
+            <span className="text-xs font-semibold text-zinc-400">Utilidad Neta Real</span>
             <h3 className="text-2xl font-black text-emerald-400 mt-1">{formattedProfit}</h3>
             <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" /> Ingreso libre estimado
+              <ArrowUpRight className="w-3.5 h-3.5" /> Ganancia libre final
             </span>
           </div>
           <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
@@ -568,12 +664,12 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Porcentaje de Margen Global */}
+        {/* Porcentaje de Margen Operativo */}
         <div className="p-5 rounded-2xl bg-zinc-900/90 border border-teal-500/30 flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Margen de Ganancia</span>
-            <h3 className="text-2xl font-black text-teal-300 mt-1">{financialMetrics.marginPct}%</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Rentabilidad bruta comercial</span>
+            <span className="text-xs font-semibold text-zinc-400">Margen Operativo</span>
+            <h3 className="text-2xl font-black text-teal-300 mt-1">{financialMetrics.realMarginPct}%</h3>
+            <span className="text-[10px] text-zinc-500 block mt-1">Rentabilidad neta real</span>
           </div>
           <div className="p-3 rounded-2xl bg-teal-600/20 text-teal-400 border border-teal-500/30">
             <BarChart3 className="w-6 h-6" />
@@ -581,17 +677,83 @@ export default function AdminDashboardPage() {
         </div>
       </section>
 
-      {/* GRÁFICOS ANALÍTICOS FINANCIEROS Y DE PRODUCTOS */}
+      {/* WIDGET RESUMEN DE CAJA: EFECTIVO VS TRANSFERENCIA */}
+      <section className="p-6 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-emerald-400" />
+              <span>Arqueo y Control de Caja en Tiempo Real</span>
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Distribución de fondos según medios de pago de clientes (Efectivo vs Transferencia), descontando egresos.
+            </p>
+          </div>
+          <Link
+            href="/admin/cash"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 font-bold border border-zinc-700 transition-colors"
+          >
+            <span>Ver Arqueo Detallado</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-zinc-950 border border-emerald-500/30 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
+                💵 Efectivo en Caja Física
+              </span>
+              <h4 className="text-xl font-black text-white mt-1">
+                ${cashMetrics.netCashInHand.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[10px] text-zinc-400 block mt-0.5">
+                Ventas: +${cashMetrics.salesCash.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesCash.toLocaleString('es-CL')}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-950 border border-purple-500/30 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider block">
+                💳 Transferencias (Banco)
+              </span>
+              <h4 className="text-xl font-black text-white mt-1">
+                ${cashMetrics.netBankTransfer.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[10px] text-zinc-400 block mt-0.5">
+                Ventas: +${cashMetrics.salesTransfer.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesTransfer.toLocaleString('es-CL')}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-950 border border-orange-500/30 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider block">
+                💰 Saldo Total Disponible
+              </span>
+              <h4 className="text-xl font-black text-white mt-1">
+                ${cashMetrics.totalAvailable.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[10px] text-zinc-400 block mt-0.5">
+                Total acumulado en caja + banco
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* GRÁFICOS ANALÍTICOS FINANCIEROS */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gráfico Comparativo: Ventas vs Costos vs Ganancia por Día/Período */}
+        {/* Gráfico Comparativo: Ventas vs Costos vs Gastos vs Utilidad Neta Real */}
         <div className="lg:col-span-2 p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-base font-extrabold text-white flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-purple-400" />
-                <span>Análisis Financiero: Ventas vs Costos vs Ganancia Neta</span>
+                <span>Análisis Financiero: Ventas vs Costos vs Gastos vs Utilidad Neta</span>
               </h3>
-              <p className="text-xs text-zinc-400">Comparativa de ingresos brutos, costos de inventario y utilidad libre por día</p>
+              <p className="text-xs text-zinc-400">Comparativa de ingresos brutos, costos de mercadería, gastos operacionales y utilidad libre por día</p>
             </div>
           </div>
 
@@ -608,7 +770,8 @@ export default function AdminDashboardPage() {
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                 <Bar dataKey="Ventas" fill="#a855f7" radius={[6, 6, 0, 0]} />
                 <Bar dataKey="Costos" fill="#f97316" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Ganancia" fill="#10b981" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Gastos" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Utilidad" fill="#10b981" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -653,32 +816,6 @@ export default function AdminDashboardPage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* GRÁFICO DE ANÁLISIS DE PRODUCTOS, COSTOS Y VENTAS */}
-      <section className="p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
-        <div>
-          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-emerald-400" />
-            <span>Análisis Analítico Gráfico por Producto: Ventas, Costos y Ganancia</span>
-          </h3>
-          <p className="text-xs text-zinc-400">Desglose de contribución financiera por producto demandado</p>
-        </div>
-
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={productMarginData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-              <XAxis type="number" stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
-              <YAxis dataKey="name" type="category" stroke="#a1a1aa" fontSize={11} width={130} />
-              <Tooltip contentStyle={{ backgroundColor: '#18181b', borderColor: '#3f3f46' }} formatter={(v: any) => [`$${v.toLocaleString('es-CL')}`]} />
-              <Legend wrapperStyle={{ fontSize: '11px' }} />
-              <Bar dataKey="Ventas" fill="#a855f7" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="Costos" fill="#f97316" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="Ganancia" fill="#10b981" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
         </div>
       </section>
 

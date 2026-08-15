@@ -13,6 +13,9 @@ import {
   Menu,
   X,
   Store,
+  FileText,
+  Wallet,
+  Receipt,
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -54,9 +57,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const navItems = [
-    { name: 'Dashboard & Analítica', href: '/admin', icon: LayoutDashboard },
+    { name: 'Dashboard & Finanzas', href: '/admin', icon: LayoutDashboard },
+    { name: 'Facturas (Abastecimiento)', href: '/admin/invoices', icon: FileText },
     { name: 'Productos e Inventario', href: '/admin/products', icon: Package },
     { name: 'Promociones (Packs)', href: '/admin/promotions', icon: Sparkles },
+    { name: 'Control y Arqueo de Caja', href: '/admin/cash', icon: Wallet },
+    { name: 'Gastos Operacionales', href: '/admin/expenses', icon: Receipt },
     { name: 'Historial de Ventas', href: '/admin/sales', icon: ShoppingBag },
   ];
 

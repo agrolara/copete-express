@@ -1,12 +1,20 @@
 import fs from 'fs';
 import path from 'path';
-import { Product, Promotion, Sale } from '@/types';
-import { INITIAL_PRODUCTS, INITIAL_PROMOTIONS, INITIAL_SALES } from './supabase';
+import { Product, Promotion, Sale, Invoice, Expense } from '@/types';
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_PROMOTIONS,
+  INITIAL_SALES,
+  INITIAL_INVOICES,
+  INITIAL_EXPENSES,
+} from './supabase';
 
 export interface AppStoreData {
   products: Product[];
   promotions: Promotion[];
   sales: Sale[];
+  invoices: Invoice[];
+  expenses: Expense[];
   whatsappNumber: string;
   bankDetails: {
     banco: string;
@@ -24,6 +32,8 @@ const defaultStore: AppStoreData = {
   products: INITIAL_PRODUCTS,
   promotions: INITIAL_PROMOTIONS,
   sales: INITIAL_SALES,
+  invoices: INITIAL_INVOICES,
+  expenses: INITIAL_EXPENSES,
   whatsappNumber: '56912345678',
   bankDetails: {
     banco: 'Banco Estado / Banco de Chile',
@@ -44,6 +54,9 @@ export function getStore(): AppStoreData {
     if (fs.existsSync(STORE_FILE)) {
       const data = fs.readFileSync(STORE_FILE, 'utf-8');
       memoryStore = JSON.parse(data);
+      // Asegurar compatibilidad si se agregaron nuevos campos
+      if (!memoryStore!.invoices) memoryStore!.invoices = INITIAL_INVOICES;
+      if (!memoryStore!.expenses) memoryStore!.expenses = INITIAL_EXPENSES;
       return memoryStore!;
     }
   } catch (e) {

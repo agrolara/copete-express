@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getStore, saveStore } from '@/lib/serverStore';
-import { INITIAL_PRODUCTS, INITIAL_PROMOTIONS, INITIAL_SALES } from '@/lib/supabase';
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_PROMOTIONS,
+  INITIAL_SALES,
+  INITIAL_INVOICES,
+  INITIAL_EXPENSES,
+} from '@/lib/supabase';
 
 export async function GET() {
   const store = getStore();
@@ -37,6 +43,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, store });
     }
 
+    if (action === 'ADD_INVOICE') {
+      const { invoice, updatedProducts } = payload;
+      store.invoices = [invoice, ...(store.invoices || [])];
+      if (updatedProducts) {
+        store.products = updatedProducts;
+      }
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'DELETE_INVOICE') {
+      const { invoiceId, updatedProducts } = payload;
+      store.invoices = (store.invoices || []).filter((i) => i.id !== invoiceId);
+      if (updatedProducts) {
+        store.products = updatedProducts;
+      }
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'ADD_EXPENSE') {
+      const { expense } = payload;
+      store.expenses = [expense, ...(store.expenses || [])];
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'DELETE_EXPENSE') {
+      const { expenseId } = payload;
+      store.expenses = (store.expenses || []).filter((e) => e.id !== expenseId);
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
     if (action === 'UPDATE_PRODUCTS') {
       store.products = payload;
       saveStore(store);
@@ -54,6 +94,8 @@ export async function POST(req: Request) {
       store.products = INITIAL_PRODUCTS;
       store.promotions = INITIAL_PROMOTIONS;
       store.sales = INITIAL_SALES;
+      store.invoices = INITIAL_INVOICES;
+      store.expenses = INITIAL_EXPENSES;
       saveStore(store);
       return NextResponse.json({ success: true, store });
     }
