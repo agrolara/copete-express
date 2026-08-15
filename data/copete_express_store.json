@@ -1,0 +1,16 @@
+{
+  "products": [],
+  "promotions": [],
+  "sales": [],
+  "invoices": [],
+  "expenses": [],
+  "whatsappNumber": "56912345678",
+  "bankDetails": {
+    "banco": "Banco Estado / Banco de Chile",
+    "tipoCuenta": "Cuenta Vista / Rut / Corriente",
+    "numeroCuenta": "123456789",
+    "rut": "12.345.678-9",
+    "nombre": "Copete Express SpA",
+    "email": "pagos@copeteexpress.cl"
+  }
+}

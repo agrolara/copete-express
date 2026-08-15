@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getStore, saveStore } from '@/lib/serverStore';
-import {
-  INITIAL_PRODUCTS,
-  INITIAL_PROMOTIONS,
-  INITIAL_SALES,
-  INITIAL_INVOICES,
-  INITIAL_EXPENSES,
-} from '@/lib/supabase';
 
 export async function GET() {
   const store = getStore();
@@ -22,6 +15,30 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, payload } = body;
     const store = getStore();
+
+    if (action === 'SAVE_ALL') {
+      if (payload.products !== undefined) store.products = payload.products;
+      if (payload.promotions !== undefined) store.promotions = payload.promotions;
+      if (payload.sales !== undefined) store.sales = payload.sales;
+      if (payload.invoices !== undefined) store.invoices = payload.invoices;
+      if (payload.expenses !== undefined) store.expenses = payload.expenses;
+      if (payload.whatsappNumber) store.whatsappNumber = payload.whatsappNumber;
+      if (payload.bankDetails) store.bankDetails = payload.bankDetails;
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'UPDATE_PRODUCTS') {
+      store.products = payload;
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'UPDATE_PROMOTIONS') {
+      store.promotions = payload;
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
 
     if (action === 'ADD_SALE') {
       const { sale, updatedProducts } = payload;
@@ -77,12 +94,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, store });
     }
 
-    if (action === 'UPDATE_PRODUCTS') {
-      store.products = payload;
-      saveStore(store);
-      return NextResponse.json({ success: true, store });
-    }
-
     if (action === 'UPDATE_SETTINGS') {
       if (payload.whatsappNumber) store.whatsappNumber = payload.whatsappNumber;
       if (payload.bankDetails) store.bankDetails = payload.bankDetails;
@@ -91,11 +102,11 @@ export async function POST(req: Request) {
     }
 
     if (action === 'RESET_ALL') {
-      store.products = INITIAL_PRODUCTS;
-      store.promotions = INITIAL_PROMOTIONS;
-      store.sales = INITIAL_SALES;
-      store.invoices = INITIAL_INVOICES;
-      store.expenses = INITIAL_EXPENSES;
+      store.products = [];
+      store.promotions = [];
+      store.sales = [];
+      store.invoices = [];
+      store.expenses = [];
       saveStore(store);
       return NextResponse.json({ success: true, store });
     }

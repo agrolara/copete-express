@@ -26,7 +26,9 @@ export interface AppStoreData {
   };
 }
 
-const STORE_FILE = path.join(process.cwd(), '.next', 'copete_express_store.json');
+// Almacén persistente en carpeta data/ fuera de .next para preservar datos entre compilaciones y reinicios
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const STORE_FILE = path.join(DATA_DIR, 'copete_express_store.json');
 
 const defaultStore: AppStoreData = {
   products: INITIAL_PRODUCTS,
@@ -54,9 +56,11 @@ export function getStore(): AppStoreData {
     if (fs.existsSync(STORE_FILE)) {
       const data = fs.readFileSync(STORE_FILE, 'utf-8');
       memoryStore = JSON.parse(data);
-      // Asegurar compatibilidad si se agregaron nuevos campos
-      if (!memoryStore!.invoices) memoryStore!.invoices = INITIAL_INVOICES;
-      if (!memoryStore!.expenses) memoryStore!.expenses = INITIAL_EXPENSES;
+      if (!memoryStore!.products) memoryStore!.products = [];
+      if (!memoryStore!.promotions) memoryStore!.promotions = [];
+      if (!memoryStore!.sales) memoryStore!.sales = [];
+      if (!memoryStore!.invoices) memoryStore!.invoices = [];
+      if (!memoryStore!.expenses) memoryStore!.expenses = [];
       return memoryStore!;
     }
   } catch (e) {

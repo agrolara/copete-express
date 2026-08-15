@@ -74,15 +74,15 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [promotions, setPromotions] = useState<Promotion[]>(INITIAL_PROMOTIONS);
-  const [sales, setSales] = useState<Sale[]>(INITIAL_SALES);
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
-  const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
+  const [products, setProductsState] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [promotions, setPromotionsState] = useState<Promotion[]>(INITIAL_PROMOTIONS);
+  const [sales, setSalesState] = useState<Sale[]>(INITIAL_SALES);
+  const [invoices, setInvoicesState] = useState<Invoice[]>(INITIAL_INVOICES);
+  const [expenses, setExpensesState] = useState<Expense[]>(INITIAL_EXPENSES);
 
   // Configuración de WhatsApp y Datos Bancarios editables por el Super Admin
-  const [whatsappNumber, setWhatsappNumber] = useState<string>('56912345678');
-  const [bankDetails, setBankDetails] = useState<BankDetails>({
+  const [whatsappNumber, setWhatsappNumberState] = useState<string>('56912345678');
+  const [bankDetails, setBankDetailsState] = useState<BankDetails>({
     banco: 'Banco Estado / Banco de Chile',
     tipoCuenta: 'Cuenta Vista / Rut / Corriente',
     numeroCuenta: '123456789',
@@ -91,19 +91,67 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: 'pagos@copeteexpress.cl',
   });
 
+  // Guardado persistente automático de Productos
+  const setProducts: React.Dispatch<React.SetStateAction<Product[]>> = (value) => {
+    setProductsState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_PRODUCTS', payload: next }),
+      }).catch((e) => console.error('Error persisting products:', e));
+      return next;
+    });
+  };
+
+  // Guardado persistente automático de Promociones
+  const setPromotions: React.Dispatch<React.SetStateAction<Promotion[]>> = (value) => {
+    setPromotionsState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: next }),
+      }).catch((e) => console.error('Error persisting promotions:', e));
+      return next;
+    });
+  };
+
+  const setSales = setSalesState;
+  const setInvoices = setInvoicesState;
+  const setExpenses = setExpensesState;
+
+  const setWhatsappNumber = (num: string) => {
+    setWhatsappNumberState(num);
+    fetch('/api/store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { whatsappNumber: num } }),
+    }).catch(console.error);
+  };
+
+  const setBankDetails = (details: BankDetails) => {
+    setBankDetailsState(details);
+    fetch('/api/store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'UPDATE_SETTINGS', payload: { bankDetails: details } }),
+    }).catch(console.error);
+  };
+
   // Cargar estado centralizado desde la API del Servidor (/api/store)
   const fetchServerStore = async () => {
     try {
       const res = await fetch('/api/store', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        if (data.products) setProducts(data.products);
-        if (data.promotions) setPromotions(data.promotions);
-        if (data.sales) setSales(data.sales);
-        if (data.invoices) setInvoices(data.invoices);
-        if (data.expenses) setExpenses(data.expenses);
-        if (data.whatsappNumber) setWhatsappNumber(data.whatsappNumber);
-        if (data.bankDetails) setBankDetails(data.bankDetails);
+        if (data.products !== undefined) setProductsState(data.products);
+        if (data.promotions !== undefined) setPromotionsState(data.promotions);
+        if (data.sales !== undefined) setSalesState(data.sales);
+        if (data.invoices !== undefined) setInvoicesState(data.invoices);
+        if (data.expenses !== undefined) setExpensesState(data.expenses);
+        if (data.whatsappNumber) setWhatsappNumberState(data.whatsappNumber);
+        if (data.bankDetails) setBankDetailsState(data.bankDetails);
       }
     } catch (e) {
       console.error('Error sincronizando estado con el servidor:', e);
@@ -114,7 +162,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Cargar del servidor al iniciar
     fetchServerStore();
 
-    // Polling ligero de 8 segundos para mantener PC y Celulares 100% sincronizados en tiempo real
+    // Polling ligero de 8 segundos para mantener dispositivos sincronizados
     const interval = setInterval(fetchServerStore, 8000);
     return () => clearInterval(interval);
   }, []);
@@ -150,10 +198,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      setProducts(updatedProducts);
+      setProductsState(updatedProducts);
     }
 
-    setSales((prev) => prev.filter((s) => s.id !== saleId));
+    setSalesState((prev) => prev.filter((s) => s.id !== saleId));
 
     try {
       await fetch('/api/store', {
@@ -182,21 +230,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: new Date().toISOString(),
       };
 
-      // Clonar lista de productos
+      // Si vienen nuevos productos creados dentro de la factura, agregarlos al catálogo
       let updatedProducts = [...products];
 
-      // Si hay productos nuevos creados en la factura, incorporarlos
-      if (newProducts.length > 0) {
-        newProducts.forEach((newP) => {
-          if (!updatedProducts.some((p) => p.id === newP.id)) {
-            updatedProducts.push(newP);
+      if (newProducts && newProducts.length > 0) {
+        newProducts.forEach((newProd) => {
+          const exists = updatedProducts.some((p) => p.id === newProd.id || p.name.toLowerCase() === newProd.name.toLowerCase());
+          if (!exists) {
+            updatedProducts.push(newProd);
           }
         });
       }
 
-      // Actualizar stock y costo unitario de cada ítem de la factura
+      // Sumar el stock comprado y actualizar costo de compra de cada ítem
       newInvoice.items.forEach((item) => {
-        const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+        const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id || p.name.toLowerCase() === item.product_name.toLowerCase());
         if (pIdx > -1) {
           updatedProducts[pIdx] = {
             ...updatedProducts[pIdx],
@@ -207,8 +255,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      setProducts(updatedProducts);
-      setInvoices((prev) => [newInvoice, ...prev]);
+      setProductsState(updatedProducts);
+      setInvoicesState((prev) => [newInvoice, ...prev]);
 
       await fetch('/api/store', {
         method: 'POST',
@@ -244,10 +292,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
       });
-      setProducts(updatedProducts);
+      setProductsState(updatedProducts);
     }
 
-    setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+    setInvoicesState((prev) => prev.filter((i) => i.id !== invoiceId));
 
     try {
       await fetch('/api/store', {
@@ -275,7 +323,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: new Date().toISOString(),
       };
 
-      setExpenses((prev) => [newExpense, ...prev]);
+      setExpensesState((prev) => [newExpense, ...prev]);
 
       await fetch('/api/store', {
         method: 'POST',
@@ -297,7 +345,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteExpense = async (expenseId: string) => {
-    setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
+    setExpensesState((prev) => prev.filter((e) => e.id !== expenseId));
 
     try {
       await fetch('/api/store', {
@@ -314,10 +362,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetAllData = async () => {
-    setProducts(INITIAL_PRODUCTS);
-    setSales(INITIAL_SALES);
-    setInvoices(INITIAL_INVOICES);
-    setExpenses(INITIAL_EXPENSES);
+    setProductsState([]);
+    setPromotionsState([]);
+    setSalesState([]);
+    setInvoicesState([]);
+    setExpensesState([]);
     try {
       await fetch('/api/store', {
         method: 'POST',
@@ -451,7 +500,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (pIndex === -1 || updatedProducts[pIndex].stock < needed) {
               return {
                 success: false,
-                message: `Stock insuficiente para ingredientes de la promo ${promo.name}.`,
+                message: `Stock insuficiente para armar el pack ${promo.name}.`,
               };
             }
             updatedProducts[pIndex] = {
@@ -459,21 +508,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               stock: updatedProducts[pIndex].stock - needed,
             };
           }
+          saleItemsList.push({
+            id: crypto.randomUUID(),
+            sale_id: '',
+            promotion_id: promo.id,
+            quantity: item.quantity,
+            unit_price: promo.promo_price,
+            cost_price: Math.round(promo.promo_price * 0.6),
+            item_name: promo.name,
+          });
+          calculatedTotal += promo.promo_price * item.quantity;
         }
-        saleItemsList.push({
-          id: crypto.randomUUID(),
-          sale_id: '',
-          promotion_id: item.id,
-          quantity: item.quantity,
-          unit_price: item.price,
-          cost_price: Math.round(item.price * 0.6),
-          item_name: item.name,
-        });
-        calculatedTotal += item.price * item.quantity;
       }
     }
 
-    // REGISTRAR VENTA EN EL SERVIDOR CENTRALIZADO
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
@@ -487,28 +535,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
     };
 
-    setSales((prev) => [newSale, ...prev]);
-    setProducts(updatedProducts);
+    setProductsState(updatedProducts);
+    setSalesState((prevSales) => [newSale, ...prevSales]);
     clearCart();
-    setIsCartOpen(false);
 
     try {
       await fetch('/api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ADD_SALE', payload: { sale: newSale, updatedProducts } }),
+        body: JSON.stringify({
+          action: 'ADD_SALE',
+          payload: { sale: newSale, updatedProducts },
+        }),
       });
     } catch (e) {
-      console.error('Error enviando nueva venta al servidor:', e);
+      console.error('Error enviando venta al servidor:', e);
     }
 
-    return {
-      success: true,
-      message: '¡Pedido registrado con éxito! El inventario ha sido actualizado.',
-    };
+    return { success: true, message: 'Pedido registrado con éxito.' };
   };
 
-  // Creación Manual de Pedidos por Administradores desde el Dashboard
+  // Crear Pedido Manual por Administrador (WhatsApp)
   const createAdminOrder = async (
     customerName: string,
     customerPhone: string,
@@ -516,34 +563,31 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod: PaymentMethod,
     orderItems: { id: string; type: 'product' | 'promotion'; quantity: number }[]
   ): Promise<{ success: boolean; message: string; summaryText: string }> => {
-    if (orderItems.length === 0) {
-      return { success: false, message: 'Debe seleccionar al menos un producto o promoción.', summaryText: '' };
-    }
-
     const updatedProducts = [...products];
-    let totalOrderPrice = 0;
-    const itemLines: string[] = [];
+    let calculatedTotal = 0;
     const saleItemsList: SaleItem[] = [];
+    const summaryLines: string[] = [];
+
+    summaryLines.push(`🍺 *PEDIDO COPETE EXPRESS* 🍺`);
+    summaryLines.push(`👤 *Cliente:* ${customerName}`);
+    summaryLines.push(`📞 *Teléfono:* ${customerPhone}`);
+    summaryLines.push(`📍 *Dirección:* ${deliveryAddress}`);
+    summaryLines.push(`💳 *Forma de Pago:* ${paymentMethod === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo al Recibir'}`);
+    summaryLines.push(`\n🛒 *DETALLE DEL PEDIDO:*`);
 
     for (const item of orderItems) {
       if (item.type === 'product') {
-        const prodIndex = updatedProducts.findIndex((p) => p.id === item.id);
-        if (prodIndex === -1 || updatedProducts[prodIndex].stock < item.quantity) {
+        const prod = updatedProducts.find((p) => p.id === item.id);
+        if (!prod || prod.stock < item.quantity) {
           return {
             success: false,
-            message: `Stock insuficiente para el producto ${updatedProducts[prodIndex]?.name || ''}.`,
+            message: `Stock insuficiente para ${prod?.name || 'producto'}.`,
             summaryText: '',
           };
         }
-        const prod = updatedProducts[prodIndex];
-        updatedProducts[prodIndex] = {
-          ...prod,
-          stock: prod.stock - item.quantity,
-        };
-
-        const itemSubtotal = prod.price * item.quantity;
-        totalOrderPrice += itemSubtotal;
-        itemLines.push(`• ${item.quantity}x ${prod.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
+        prod.stock -= item.quantity;
+        const subtotal = prod.price * item.quantity;
+        calculatedTotal += subtotal;
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
@@ -553,46 +597,53 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cost_price: prod.cost_price || Math.round(prod.price * 0.6),
           item_name: prod.name,
         });
+        summaryLines.push(`• ${item.quantity}x ${prod.name} - $${subtotal.toLocaleString('es-CL')}`);
       } else {
-        const promoIndex = promotions.findIndex((p) => p.id === item.id);
-        if (promoIndex === -1) {
-          return { success: false, message: 'Promoción no encontrada.', summaryText: '' };
-        }
-        const promo = promotions[promoIndex];
-        if (promo.items && promo.items.length > 0) {
+        const promo = promotions.find((p) => p.id === item.id);
+        if (promo && promo.items) {
           for (const pi of promo.items) {
             const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
             const needed = pi.quantity * item.quantity;
             if (pIdx === -1 || updatedProducts[pIdx].stock < needed) {
               return {
                 success: false,
-                message: `Stock insuficiente para armar ${promo.name}.`,
+                message: `Stock insuficiente para pack ${promo.name}.`,
                 summaryText: '',
               };
             }
-            updatedProducts[pIdx] = {
-              ...updatedProducts[pIdx],
-              stock: updatedProducts[pIdx].stock - needed,
-            };
+            updatedProducts[pIdx].stock -= needed;
           }
+          const subtotal = promo.promo_price * item.quantity;
+          calculatedTotal += subtotal;
+          saleItemsList.push({
+            id: crypto.randomUUID(),
+            sale_id: '',
+            promotion_id: promo.id,
+            quantity: item.quantity,
+            unit_price: promo.promo_price,
+            cost_price: Math.round(promo.promo_price * 0.6),
+            item_name: promo.name,
+          });
+          summaryLines.push(`• ${item.quantity}x ${promo.name} - $${subtotal.toLocaleString('es-CL')}`);
         }
-
-        const itemSubtotal = promo.promo_price * item.quantity;
-        totalOrderPrice += itemSubtotal;
-        itemLines.push(`• ${item.quantity}x ${promo.name} (Pack) - $${itemSubtotal.toLocaleString('es-CL')}`);
-        saleItemsList.push({
-          id: crypto.randomUUID(),
-          sale_id: '',
-          promotion_id: promo.id,
-          quantity: item.quantity,
-          unit_price: promo.promo_price,
-          cost_price: Math.round(promo.promo_price * 0.6),
-          item_name: promo.name,
-        });
       }
     }
 
-    const orderId = `ADM-${Math.floor(1000 + Math.random() * 9000)}`;
+    summaryLines.push(`\n💰 *TOTAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
+
+    if (paymentMethod === 'transferencia') {
+      summaryLines.push(`\n🏦 *DATOS DE TRANSFERENCIA:*`);
+      summaryLines.push(`• *Banco:* ${bankDetails.banco}`);
+      summaryLines.push(`• *Tipo de Cuenta:* ${bankDetails.tipoCuenta}`);
+      summaryLines.push(`• *N° Cuenta:* ${bankDetails.numeroCuenta}`);
+      summaryLines.push(`• *RUT:* ${bankDetails.rut}`);
+      summaryLines.push(`• *Titular:* ${bankDetails.nombre}`);
+      summaryLines.push(`• *Email:* ${bankDetails.email}`);
+      summaryLines.push(`\n_Por favor envía el comprobante respondiendo a este mensaje para despachar de inmediato._ 🚀`);
+    } else {
+      summaryLines.push(`\n💵 _Pago en efectivo al repartidor al momento de la entrega._ 🛵💨`);
+    }
+
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
@@ -600,52 +651,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       customer_phone: customerPhone,
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
-      total_amount: totalOrderPrice,
+      total_amount: calculatedTotal,
       status: 'completed',
       created_at: new Date().toISOString(),
       items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
     };
 
-    setSales((prev) => [newSale, ...prev]);
-    setProducts(updatedProducts);
+    setProductsState(updatedProducts);
+    setSalesState((prevSales) => [newSale, ...prevSales]);
 
     try {
       await fetch('/api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ADD_SALE', payload: { sale: newSale, updatedProducts } }),
+        body: JSON.stringify({
+          action: 'ADD_SALE',
+          payload: { sale: newSale, updatedProducts },
+        }),
       });
     } catch (e) {
-      console.error('Error enviando nueva venta manual al servidor:', e);
-    }
-
-    // Generar resumen para WhatsApp
-    let summary = `🍻 *COPETE EXPRESS - RESUMEN DE TU PEDIDO #${orderId}* 🍻\n\n`;
-    summary += `👤 *Cliente:* ${customerName}\n`;
-    summary += `📞 *Teléfono:* ${customerPhone}\n`;
-    summary += `📍 *Dirección de Entrega:* ${deliveryAddress}\n\n`;
-    summary += `📋 *DETALLE DEL PEDIDO:*\n`;
-    summary += itemLines.join('\n') + '\n\n';
-    summary += `💰 *TOTAL A PAGAR: $${totalOrderPrice.toLocaleString('es-CL')}*\n`;
-    summary += `💳 *Forma de Pago:* ${paymentMethod === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo al Recibir'}\n\n`;
-
-    if (paymentMethod === 'transferencia') {
-      summary += `🏦 *DATOS PARA TRANSFERENCIA BANCARIA:*\n`;
-      summary += `• *Banco:* ${bankDetails.banco}\n`;
-      summary += `• *Tipo de Cuenta:* ${bankDetails.tipoCuenta}\n`;
-      summary += `• *Número:* ${bankDetails.numeroCuenta}\n`;
-      summary += `• *RUT:* ${bankDetails.rut}\n`;
-      summary += `• *Nombre:* ${bankDetails.nombre}\n`;
-      summary += `• *Correo de Confirmación:* ${bankDetails.email}\n\n`;
-      summary += `⚠️ _Por favor reenvía el comprobante de transferencia a este chat para enviar al repartidor de inmediato._ 🚀`;
-    } else {
-      summary += `💵 _Recuerda tener el efectivo listo al momento de la entrega._ 🚀`;
+      console.error('Error enviando venta de admin al servidor:', e);
     }
 
     return {
       success: true,
-      message: '¡Pedido manual generado y stock descontado con éxito!',
-      summaryText: summary,
+      message: 'Venta registrada con éxito.',
+      summaryText: summaryLines.join('\n'),
     };
   };
 

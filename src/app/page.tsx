@@ -67,11 +67,12 @@ export default function HomePage() {
 
     // Fallback dinámico si aún no se han registrado ventas en el historial
     const firstPromo = promotions[0];
+    const firstProduct = products[0];
     return {
-      name: firstPromo?.name || 'Pack Piscola Suprema 1L',
-      image_url: firstPromo?.image_url || 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=800&q=80',
-      price: firstPromo?.promo_price || 11990,
-      details: firstPromo?.description || 'Pisco Alto 1L + Coca 1.5L + Hielo 2kg',
+      name: firstPromo?.name || firstProduct?.name || 'Copete Express 24/7',
+      image_url: firstPromo?.image_url || firstProduct?.image_url || 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=800&q=80',
+      price: firstPromo?.promo_price || firstProduct?.price || 0,
+      details: firstPromo?.description || firstProduct?.description || 'Tu previa express con despacho en minutos.',
       count: 0,
     };
   }, [sales, products, promotions]);
