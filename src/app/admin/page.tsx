@@ -603,30 +603,34 @@ export default function AdminDashboardPage() {
         </section>
       )}
 
-      {/* TARJETAS DE ANALÍTICA FINANCIERA: VENTAS, COSTOS, GASTOS, GANANCIA NETA REAL Y MARGEN */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* TARJETAS DE ANALÍTICA FINANCIERA: VENTAS, COSTOS, GASTOS Y UTILIDAD NETA REAL */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Ventas Totales */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-purple-500/30 flex items-center justify-between shadow-neon-purple">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-purple-500/40 shadow-neon-purple flex items-center justify-between transition-all">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Ventas Totales</span>
-            <h3 className="text-2xl font-black text-white mt-1">{formattedRevenue}</h3>
-            <span className="text-[10px] text-purple-400 font-bold block mt-1">
-              {filteredSales.length} Transacciones
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-300">
+              Ventas Totales (Bruto)
+            </span>
+            <h3 className="text-3xl font-black text-white mt-1.5">{formattedRevenue}</h3>
+            <span className="text-[11px] text-purple-400 font-extrabold block mt-1">
+              {filteredSales.length} Ventas registradas
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+          <div className="p-3.5 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/40">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
         {/* Costo Mercadería */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-orange-500/30 flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-orange-500/40 shadow-neon-orange flex items-center justify-between transition-all">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Costo de Mercadería</span>
-            <h3 className="text-2xl font-black text-orange-400 mt-1">{formattedCost}</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Costo compras vendido</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-orange-300">
+              Costo de Mercadería
+            </span>
+            <h3 className="text-3xl font-black text-orange-400 mt-1.5">{formattedCost}</h3>
+            <span className="text-[11px] text-zinc-400 block mt-1">Costo de compra del stock vendido</span>
           </div>
-          <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
+          <div className="p-3.5 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/40">
             <Layers className="w-6 h-6" />
           </div>
         </div>
@@ -634,110 +638,115 @@ export default function AdminDashboardPage() {
         {/* Gastos Operacionales */}
         <Link
           href="/admin/expenses"
-          className="p-5 rounded-2xl bg-zinc-900/90 border border-red-500/30 hover:border-red-500/60 flex items-center justify-between transition-all group"
+          className="p-6 rounded-3xl bg-zinc-900/90 border border-red-500/40 hover:border-red-500/80 shadow-neon-red flex items-center justify-between transition-all group"
         >
           <div>
-            <span className="text-xs font-semibold text-zinc-400 group-hover:text-red-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-red-300 group-hover:text-red-200">
               Gastos Operacionales
             </span>
-            <h3 className="text-2xl font-black text-red-400 mt-1">{formattedExpenses}</h3>
-            <span className="text-[10px] text-red-400/80 font-bold block mt-1">
-              {filteredExpenses.length} egresos clasificados →
+            <h3 className="text-3xl font-black text-red-400 mt-1.5">{formattedExpenses}</h3>
+            <span className="text-[11px] text-red-400/90 font-extrabold flex items-center gap-1 mt-1">
+              <span>{filteredExpenses.length} egresos clasificados</span>
+              <span>→</span>
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/30">
+          <div className="p-3.5 rounded-2xl bg-red-600/20 text-red-400 border border-red-500/40 group-hover:scale-105 transition-transform">
             <TrendingDown className="w-6 h-6" />
           </div>
         </Link>
 
         {/* Utilidad Neta Real (Ventas - Costos - Gastos) */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-emerald-500/40 flex items-center justify-between shadow-lg shadow-emerald-950/40">
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-950/40 via-zinc-900 to-zinc-950 border-2 border-emerald-500/50 shadow-neon-emerald flex items-center justify-between transition-all">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Utilidad Neta Real</span>
-            <h3 className="text-2xl font-black text-emerald-400 mt-1">{formattedProfit}</h3>
-            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" /> Ganancia libre final
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                Utilidad Neta Real
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black">
+                {financialMetrics.realMarginPct}% Margen
+              </span>
+            </div>
+            <h3 className="text-3xl font-black text-emerald-400 mt-1.5">{formattedProfit}</h3>
+            <span className="text-[11px] text-emerald-300 font-bold flex items-center gap-1 mt-1">
+              <ArrowUpRight className="w-3.5 h-3.5" /> Ganancia libre después de costos y gastos
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+          <div className="p-3.5 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/40">
             <TrendingUp className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Porcentaje de Margen Operativo */}
-        <div className="p-5 rounded-2xl bg-zinc-900/90 border border-teal-500/30 flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-zinc-400">Margen Operativo</span>
-            <h3 className="text-2xl font-black text-teal-300 mt-1">{financialMetrics.realMarginPct}%</h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Rentabilidad neta real</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-teal-600/20 text-teal-400 border border-teal-500/30">
-            <BarChart3 className="w-6 h-6" />
           </div>
         </div>
       </section>
 
       {/* WIDGET RESUMEN DE CAJA: EFECTIVO VS TRANSFERENCIA */}
-      <section className="p-6 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-4">
+      <section className="p-6 rounded-3xl bg-zinc-900/90 border border-zinc-800 space-y-5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-extrabold text-white flex items-center gap-2">
               <Wallet className="w-5 h-5 text-emerald-400" />
               <span>Arqueo y Control de Caja en Tiempo Real</span>
             </h3>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-zinc-400 mt-0.5">
               Distribución de fondos según medios de pago de clientes (Efectivo vs Transferencia), descontando egresos.
             </p>
           </div>
           <Link
             href="/admin/cash"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 font-bold border border-zinc-700 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-white text-xs font-bold border border-purple-500/40 transition-colors"
           >
-            <span>Ver Arqueo Detallado</span>
+            <span>Ver Arqueo Completo</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-emerald-500/30 flex items-center justify-between">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="p-5 rounded-2xl bg-zinc-950/90 border border-emerald-500/30 flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
+              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
                 💵 Efectivo en Caja Física
               </span>
-              <h4 className="text-xl font-black text-white mt-1">
+              <h4 className="text-2xl font-black text-white mt-1">
                 ${cashMetrics.netCashInHand.toLocaleString('es-CL')}
               </h4>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">
+              <span className="text-[11px] text-zinc-400 block mt-1">
                 Ventas: +${cashMetrics.salesCash.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesCash.toLocaleString('es-CL')}
               </span>
             </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-purple-500/30 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider block">
-                💳 Transferencias (Banco)
-              </span>
-              <h4 className="text-xl font-black text-white mt-1">
-                ${cashMetrics.netBankTransfer.toLocaleString('es-CL')}
-              </h4>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">
-                Ventas: +${cashMetrics.salesTransfer.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesTransfer.toLocaleString('es-CL')}
-              </span>
+            <div className="p-2.5 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-zinc-950 border border-orange-500/30 flex items-center justify-between">
+          <div className="p-5 rounded-2xl bg-zinc-950/90 border border-purple-500/30 flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider block">
+              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider block">
+                💳 Transferencias (Banco)
+              </span>
+              <h4 className="text-2xl font-black text-white mt-1">
+                ${cashMetrics.netBankTransfer.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[11px] text-zinc-400 block mt-1">
+                Ventas: +${cashMetrics.salesTransfer.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesTransfer.toLocaleString('es-CL')}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+              <CreditCard className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-zinc-950/90 border border-orange-500/30 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-orange-400 uppercase tracking-wider block">
                 💰 Saldo Total Disponible
               </span>
-              <h4 className="text-xl font-black text-white mt-1">
+              <h4 className="text-2xl font-black text-white mt-1">
                 ${cashMetrics.totalAvailable.toLocaleString('es-CL')}
               </h4>
-              <span className="text-[10px] text-zinc-400 block mt-0.5">
+              <span className="text-[11px] text-zinc-400 block mt-1">
                 Total acumulado en caja + banco
               </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
+              <Layers className="w-5 h-5" />
             </div>
           </div>
         </div>

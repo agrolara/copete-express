@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Sparkles,
   Layers,
+  ShoppingBag,
 } from 'lucide-react';
 
 export default function AdminInvoicesPage() {
@@ -79,6 +80,17 @@ export default function AdminInvoicesPage() {
   const currentInvoiceTotal = useMemo(() => {
     return invoiceItems.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
   }, [invoiceItems]);
+
+  // Métricas generales de facturas
+  const totalInvoicedAmount = useMemo(() => {
+    return invoices.reduce((sum, inv) => sum + inv.total_amount, 0);
+  }, [invoices]);
+
+  const totalUnitsPurchased = useMemo(() => {
+    return invoices.reduce((sum, inv) => {
+      return sum + inv.items.reduce((iSum, it) => iSum + it.quantity, 0);
+    }, 0);
+  }, [invoices]);
 
   // Manejar selección de producto existente para auto-rellenar costo y precio
   const handleSelectExistingProduct = (productId: string) => {
@@ -253,7 +265,7 @@ export default function AdminInvoicesPage() {
             <FileText className="w-7 h-7 text-purple-400" />
             <span>Ingreso de Facturas & Abastecimiento</span>
           </h1>
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-zinc-400 mt-1">
             Método principal para ingresar mercadería, registrar facturas de proveedores, crear nuevos productos y actualizar costos unitarios.
           </p>
         </div>
@@ -263,23 +275,71 @@ export default function AdminInvoicesPage() {
             setInvoiceItems([]);
             setIsNewInvoiceOpen(true);
           }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-purple hover:opacity-95 transition-all"
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-purple hover:opacity-95 transition-all"
         >
           <Plus className="w-4 h-4" />
           <span>+ Ingresar Nueva Factura</span>
         </button>
       </div>
 
-      {/* MODAL / FORMULARIO PRINCIPAL DE INGRESO DE FACTURA */}
+      {/* TARJETAS KPI DE FACTURACIÓN Y COMPRAS */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-purple-500/40 shadow-neon-purple flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-zinc-400">Total Compras Facturadas</span>
+            <h3 className="text-2xl font-black text-white mt-1">
+              ${totalInvoicedAmount.toLocaleString('es-CL')}
+            </h3>
+            <span className="text-[10px] text-purple-400 font-bold block mt-1">
+              {invoices.length} facturas registradas
+            </span>
+          </div>
+          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+            <DollarSign className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-orange-500/40 shadow-neon-orange flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-zinc-400">Proveedores Activos</span>
+            <h3 className="text-2xl font-black text-orange-400 mt-1">
+              {frequentSuppliers.length} Proveedores
+            </h3>
+            <span className="text-[10px] text-zinc-500 block mt-1">Empresas emisoras registradas</span>
+          </div>
+          <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
+            <Building2 className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-emerald-500/40 shadow-neon-emerald flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-zinc-400">Unidades Abastecidas</span>
+            <h3 className="text-2xl font-black text-emerald-400 mt-1">
+              +{totalUnitsPurchased.toLocaleString('es-CL')} un.
+            </h3>
+            <span className="text-[10px] text-emerald-400 font-bold block mt-1">Mercadería cargada a bodega</span>
+          </div>
+          <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+            <Package className="w-6 h-6" />
+          </div>
+        </div>
+      </section>
+
+      {/* FORMULARIO MODAL PRINCIPAL DE INGRESO DE FACTURA */}
       {isNewInvoiceOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative bg-zinc-900 border border-purple-500/30 rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Header Sticky */}
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <FileText className="w-6 h-6 text-purple-400" />
                 <h3 className="text-lg font-black text-white">Ingresar Factura de Proveedor</h3>
               </div>
-              <button onClick={() => setIsNewInvoiceOpen(false)} className="text-zinc-400 hover:text-white">
+              <button
+                onClick={() => setIsNewInvoiceOpen(false)}
+                className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -298,7 +358,7 @@ export default function AdminInvoicesPage() {
                     placeholder="Ej: Distribuidora CCU"
                     value={supplierName}
                     onChange={(e) => setSupplierName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
                   />
                   <datalist id="suppliers-list">
                     {frequentSuppliers.map((s) => (
@@ -314,7 +374,7 @@ export default function AdminInvoicesPage() {
                     placeholder="Ej: 96.541.230-8"
                     value={supplierRut}
                     onChange={(e) => setSupplierRut(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
                   />
                 </div>
 
@@ -328,7 +388,7 @@ export default function AdminInvoicesPage() {
                     placeholder="Ej: FAC-10294"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
                   />
                 </div>
 
@@ -339,7 +399,7 @@ export default function AdminInvoicesPage() {
                     required
                     value={invoiceDate}
                     onChange={(e) => setInvoiceDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
@@ -357,7 +417,7 @@ export default function AdminInvoicesPage() {
                       onClick={() => setPaymentMethod('transferencia')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                         paymentMethod === 'transferencia'
-                          ? 'bg-purple-950/50 border-purple-500 text-white shadow-neon-purple'
+                          ? 'bg-purple-950/60 border-purple-500 text-white shadow-neon-purple'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-400'
                       }`}
                     >
@@ -368,7 +428,7 @@ export default function AdminInvoicesPage() {
                       onClick={() => setPaymentMethod('efectivo')}
                       className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                         paymentMethod === 'efectivo'
-                          ? 'bg-emerald-950/50 border-emerald-500 text-white shadow-neon-purple'
+                          ? 'bg-emerald-950/60 border-emerald-500 text-white shadow-neon-purple'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-400'
                       }`}
                     >
@@ -403,7 +463,7 @@ export default function AdminInvoicesPage() {
                       setIsCreatingNewProduct(false);
                       setIsItemModalOpen(true);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Agregar Producto a la Factura</span>
@@ -411,11 +471,11 @@ export default function AdminInvoicesPage() {
                 </div>
 
                 {invoiceItems.length === 0 ? (
-                  <div className="p-8 text-center border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs space-y-2">
+                  <div className="p-8 text-center border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs space-y-2 bg-zinc-950/50">
                     <Package className="w-8 h-8 mx-auto text-zinc-600" />
-                    <p>Aún no has agregado ningún producto a esta factura.</p>
-                    <p className="text-[11px] text-zinc-600">
-                      Haz clic en &quot;+ Agregar Producto&quot; para seleccionar del catálogo o crear nuevos productos.
+                    <p className="font-semibold text-zinc-400">Aún no has agregado ningún producto a esta factura.</p>
+                    <p className="text-[11px] text-zinc-500">
+                      Haz clic en &quot;+ Agregar Producto&quot; para seleccionar del catálogo o crear nuevos productos que se guardarán automáticamente.
                     </p>
                   </div>
                 ) : (
@@ -434,7 +494,7 @@ export default function AdminInvoicesPage() {
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                         {invoiceItems.map((item, idx) => (
-                          <tr key={item.id} className="hover:bg-zinc-900/40">
+                          <tr key={item.id} className="hover:bg-zinc-900/40 transition-colors">
                             <td className="p-3 font-bold text-white">{item.product_name}</td>
                             <td className="p-3">
                               {item.is_new_product ? (
@@ -461,7 +521,7 @@ export default function AdminInvoicesPage() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveInvoiceItem(idx)}
-                                className="p-1 rounded-lg text-red-400 hover:bg-red-950/60 transition-colors"
+                                className="p-1.5 rounded-lg text-red-400 hover:bg-red-950/60 transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -512,7 +572,10 @@ export default function AdminInvoicesPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="text-base font-extrabold text-white">Agregar Producto a la Factura</h3>
-              <button onClick={() => setIsItemModalOpen(false)} className="text-zinc-400 hover:text-white">
+              <button
+                onClick={() => setIsItemModalOpen(false)}
+                className="p-1 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -523,7 +586,7 @@ export default function AdminInvoicesPage() {
                 type="button"
                 onClick={() => setIsCreatingNewProduct(false)}
                 className={`py-2 text-xs font-bold rounded-lg transition-all ${
-                  !isCreatingNewProduct ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
+                  !isCreatingNewProduct ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 Catálogo Existente
@@ -532,7 +595,7 @@ export default function AdminInvoicesPage() {
                 type="button"
                 onClick={() => setIsCreatingNewProduct(true)}
                 className={`py-2 text-xs font-bold rounded-lg transition-all ${
-                  isCreatingNewProduct ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white'
+                  isCreatingNewProduct ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 + Crear Nuevo Producto
@@ -550,7 +613,7 @@ export default function AdminInvoicesPage() {
                     placeholder="Ej: Tequila José Cuervo Especial 750ml"
                     value={newProductName}
                     onChange={(e) => setNewProductName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
@@ -560,7 +623,7 @@ export default function AdminInvoicesPage() {
                     <select
                       value={newProductCategory}
                       onChange={(e) => setNewProductCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
                     >
                       <option value="Piscos">Piscos</option>
                       <option value="Cervezas">Cervezas</option>
@@ -577,32 +640,32 @@ export default function AdminInvoicesPage() {
                       min="1"
                       value={itemQuantity}
                       onChange={(e) => setItemQuantity(parseInt(e.target.value) || 1)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unitario ($) *</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unitario Factura ($) *</label>
                     <input
                       type="number"
                       min="0"
                       value={newProductCost || ''}
                       onChange={(e) => setNewProductCost(parseInt(e.target.value) || 0)}
-                      placeholder="Costo en factura"
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
+                      placeholder="Costo neto en factura"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Precio Venta Público ($)</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Precio Venta Catálogo ($)</label>
                     <input
                       type="number"
                       min="0"
                       value={newProductPrice || ''}
                       onChange={(e) => setNewProductPrice(parseInt(e.target.value) || 0)}
-                      placeholder="Precio catálogo"
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
+                      placeholder="Precio venta público"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
                 </div>
@@ -615,7 +678,7 @@ export default function AdminInvoicesPage() {
                   <select
                     value={selectedProductId}
                     onChange={(e) => handleSelectExistingProduct(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
                   >
                     <option value="">-- Elige un producto --</option>
                     {products.map((p) => (
@@ -628,17 +691,17 @@ export default function AdminInvoicesPage() {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Cantidad Facturada</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Cantidad</label>
                     <input
                       type="number"
                       min="1"
                       value={itemQuantity}
                       onChange={(e) => setItemQuantity(parseInt(e.target.value) || 1)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unit. Factura ($)</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unit. ($)</label>
                     <input
                       type="number"
                       min="0"
@@ -732,7 +795,7 @@ export default function AdminInvoicesPage() {
                         </span>
                       </td>
                       <td className="p-4">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                           inv.payment_method === 'transferencia'
                             ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                             : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -768,64 +831,78 @@ export default function AdminInvoicesPage() {
         </div>
       </section>
 
-      {/* MODAL DETALLE DE FACTURA */}
+      {/* MODAL DETALLE DE FACTURA (MEJORADO CON HEADER STICKY Y DISEÑO ELEGANTE) */}
       {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative bg-zinc-900 border border-purple-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Header Sticky */}
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-purple-400" />
                 <h3 className="text-base font-extrabold text-white">
                   Detalle Factura #{selectedInvoice.invoice_number}
                 </h3>
               </div>
-              <button onClick={() => setSelectedInvoice(null)} className="text-zinc-400 hover:text-white">
+              <button
+                onClick={() => setSelectedInvoice(null)}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">Proveedor:</span>
+            <div className="space-y-4 text-xs">
+              {/* Tarjeta Información Proveedor */}
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-400">Emisor / Proveedor:</span>
                   <span className="font-bold text-white">{selectedInvoice.supplier_name}</span>
                 </div>
                 {selectedInvoice.supplier_rut && (
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">RUT:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400">RUT Proveedor:</span>
                     <span className="text-zinc-300 font-mono">{selectedInvoice.supplier_rut}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-zinc-400">Fecha de Emisión:</span>
                   <span className="text-zinc-300">{selectedInvoice.invoice_date}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-zinc-400">Medio de Pago:</span>
-                  <span className="font-bold text-purple-400 uppercase">{selectedInvoice.payment_method}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedInvoice.payment_method === 'transferencia'
+                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  }`}>
+                    {selectedInvoice.payment_method === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo'}
+                  </span>
                 </div>
                 {selectedInvoice.notes && (
-                  <div className="pt-1 text-zinc-400 italic">
+                  <div className="pt-2 border-t border-zinc-800/80 text-zinc-400 italic">
                     &quot;{selectedInvoice.notes}&quot;
                   </div>
                 )}
               </div>
 
+              {/* Lista de Productos Comprados */}
               <div>
-                <h4 className="font-bold text-white mb-2">Productos Comprados:</h4>
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <h4 className="font-bold text-white mb-2 flex items-center justify-between">
+                  <span>Productos Comprados ({selectedInvoice.items.length}):</span>
+                </h4>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {selectedInvoice.items.map((it) => (
                     <div
                       key={it.id}
-                      className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 flex justify-between items-center"
+                      className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/90 flex justify-between items-center"
                     >
                       <div>
                         <span className="font-bold text-white block">{it.product_name}</span>
-                        <span className="text-zinc-500 text-[10px]">
-                          +{it.quantity} un. x ${it.cost_price.toLocaleString('es-CL')}
+                        <span className="text-zinc-400 text-[10px]">
+                          +{it.quantity} un. x ${it.cost_price.toLocaleString('es-CL')} (Costo Unitario)
                         </span>
                       </div>
-                      <span className="font-mono font-extrabold text-white">
+                      <span className="font-mono font-extrabold text-orange-400 text-sm">
                         ${it.total_cost.toLocaleString('es-CL')}
                       </span>
                     </div>
@@ -833,9 +910,10 @@ export default function AdminInvoicesPage() {
                 </div>
               </div>
 
+              {/* Total Factura */}
               <div className="pt-3 border-t border-zinc-800 flex justify-between items-center text-sm">
                 <span className="font-bold text-white">Total Factura:</span>
-                <span className="text-xl font-black text-purple-400">
+                <span className="text-2xl font-black text-purple-400">
                   ${selectedInvoice.total_amount.toLocaleString('es-CL')}
                 </span>
               </div>
