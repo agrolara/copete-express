@@ -263,64 +263,88 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }).catch(console.error);
         }
 
-        // 2. Promociones: Auto-recuperación si un nuevo deploy reinició el archivo del servidor
-        if (serverData.promotions && serverData.promotions.length > 0) {
-          setPromotionsState(serverData.promotions);
-          saveLocalBackup({ promotions: serverData.promotions });
-        } else if (localBackup?.promotions && localBackup.promotions.length > 0) {
-          setPromotionsState(localBackup.promotions);
+        // 2. Promociones: Smart-merge por ID único
+        const serverPromos = serverData.promotions || [];
+        const localPromos = localBackup?.promotions || [];
+        const promosMap = new Map<string, Promotion>();
+        serverPromos.forEach((p: Promotion) => promosMap.set(p.id, p));
+        localPromos.forEach((p: Promotion) => promosMap.set(p.id, p));
+        const mergedPromos = Array.from(promosMap.values());
+
+        setPromotionsState(mergedPromos);
+        saveLocalBackup({ promotions: mergedPromos });
+
+        if (mergedPromos.length > serverPromos.length) {
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: localBackup.promotions }),
+            body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: mergedPromos }),
           }).catch(console.error);
-        } else if (serverData.promotions !== undefined) {
-          setPromotionsState(serverData.promotions);
         }
 
-        // 3. Facturas
-        if (serverData.invoices && serverData.invoices.length > 0) {
-          setInvoicesState(serverData.invoices);
-          saveLocalBackup({ invoices: serverData.invoices });
-        } else if (localBackup?.invoices && localBackup.invoices.length > 0) {
-          setInvoicesState(localBackup.invoices);
+        // 3. Facturas: Smart-merge por ID único
+        const serverInvoices = serverData.invoices || [];
+        const localInvoices = localBackup?.invoices || [];
+        const invoicesMap = new Map<string, Invoice>();
+        serverInvoices.forEach((i: Invoice) => invoicesMap.set(i.id, i));
+        localInvoices.forEach((i: Invoice) => invoicesMap.set(i.id, i));
+        const mergedInvoices = Array.from(invoicesMap.values()).sort(
+          (a, b) =>
+            new Date(b.created_at || b.invoice_date).getTime() -
+            new Date(a.created_at || a.invoice_date).getTime()
+        );
+
+        setInvoicesState(mergedInvoices);
+        saveLocalBackup({ invoices: mergedInvoices });
+
+        if (mergedInvoices.length > serverInvoices.length) {
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: localBackup.invoices } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: mergedInvoices } }),
           }).catch(console.error);
-        } else if (serverData.invoices !== undefined) {
-          setInvoicesState(serverData.invoices);
         }
 
-        // 4. Ventas
-        if (serverData.sales && serverData.sales.length > 0) {
-          setSalesState(serverData.sales);
-          saveLocalBackup({ sales: serverData.sales });
-        } else if (localBackup?.sales && localBackup.sales.length > 0) {
-          setSalesState(localBackup.sales);
+        // 4. Ventas: Smart-merge por ID único (NUNCA se borran ventas en nuevos despliegues)
+        const serverSales = serverData.sales || [];
+        const localSales = localBackup?.sales || [];
+        const salesMap = new Map<string, Sale>();
+        serverSales.forEach((s: Sale) => salesMap.set(s.id, s));
+        localSales.forEach((s: Sale) => salesMap.set(s.id, s));
+        const mergedSales = Array.from(salesMap.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+
+        setSalesState(mergedSales);
+        saveLocalBackup({ sales: mergedSales });
+
+        if (mergedSales.length > serverSales.length) {
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: localBackup.sales } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: mergedSales } }),
           }).catch(console.error);
-        } else if (serverData.sales !== undefined) {
-          setSalesState(serverData.sales);
         }
 
-        // 5. Gastos
-        if (serverData.expenses && serverData.expenses.length > 0) {
-          setExpensesState(serverData.expenses);
-          saveLocalBackup({ expenses: serverData.expenses });
-        } else if (localBackup?.expenses && localBackup.expenses.length > 0) {
-          setExpensesState(localBackup.expenses);
+        // 5. Gastos Operacionales: Smart-merge por ID único
+        const serverExpenses = serverData.expenses || [];
+        const localExpenses = localBackup?.expenses || [];
+        const expensesMap = new Map<string, Expense>();
+        serverExpenses.forEach((e: Expense) => expensesMap.set(e.id, e));
+        localExpenses.forEach((e: Expense) => expensesMap.set(e.id, e));
+        const mergedExpenses = Array.from(expensesMap.values()).sort(
+          (a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime()
+        );
+
+        setExpensesState(mergedExpenses);
+        saveLocalBackup({ expenses: mergedExpenses });
+
+        if (mergedExpenses.length > serverExpenses.length) {
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: localBackup.expenses } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: mergedExpenses } }),
           }).catch(console.error);
-        } else if (serverData.expenses !== undefined) {
-          setExpensesState(serverData.expenses);
         }
 
         if (serverData.whatsappNumber) {
@@ -447,7 +471,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       setProductsState(updatedProducts);
-      setInvoicesState((prev) => [newInvoice, ...prev]);
+      setInvoicesState((prev) => {
+        const next = [newInvoice, ...prev];
+        saveLocalBackup({ invoices: next, products: updatedProducts });
+        return next;
+      });
 
       await fetch('/api/store', {
         method: 'POST',
@@ -518,7 +546,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       setProductsState(updatedProducts);
-      setInvoicesState((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)));
+      setInvoicesState((prev) => {
+        const next = prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv));
+        saveLocalBackup({ invoices: next, products: updatedProducts });
+        return next;
+      });
 
       await fetch('/api/store', {
         method: 'POST',
@@ -557,7 +589,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProductsState(updatedProducts);
     }
 
-    setInvoicesState((prev) => prev.filter((i) => i.id !== invoiceId));
+    setInvoicesState((prev) => {
+      const next = prev.filter((i) => i.id !== invoiceId);
+      saveLocalBackup({ invoices: next, products: updatedProducts });
+      return next;
+    });
 
     try {
       await fetch('/api/store', {
@@ -585,7 +621,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: new Date().toISOString(),
       };
 
-      setExpensesState((prev) => [newExpense, ...prev]);
+      setExpensesState((prev) => {
+        const next = [newExpense, ...prev];
+        saveLocalBackup({ expenses: next });
+        return next;
+      });
 
       await fetch('/api/store', {
         method: 'POST',
@@ -607,7 +647,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteExpense = async (expenseId: string) => {
-    setExpensesState((prev) => prev.filter((e) => e.id !== expenseId));
+    setExpensesState((prev) => {
+      const next = prev.filter((e) => e.id !== expenseId);
+      saveLocalBackup({ expenses: next });
+      return next;
+    });
 
     try {
       await fetch('/api/store', {
@@ -629,6 +673,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSalesState([]);
     setInvoicesState([]);
     setExpensesState([]);
+    saveLocalBackup({
+      products: [],
+      promotions: [],
+      sales: [],
+      invoices: [],
+      expenses: [],
+    });
     try {
       await fetch('/api/store', {
         method: 'POST',
@@ -798,7 +849,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setProductsState(updatedProducts);
-    setSalesState((prevSales) => [newSale, ...prevSales]);
+    setSalesState((prevSales) => {
+      const next = [newSale, ...prevSales];
+      saveLocalBackup({ sales: next, products: updatedProducts });
+      return next;
+    });
     clearCart();
 
     try {
@@ -828,18 +883,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedProducts = [...products];
     let calculatedTotal = 0;
     const saleItemsList: SaleItem[] = [];
-    const summaryLines: string[] = [];
-
-    summaryLines.push(`🍺 *PEDIDO COPETE EXPRESS* 🍺`);
-    summaryLines.push(`👤 *Cliente:* ${customerName}`);
-    summaryLines.push(`📞 *Teléfono:* ${customerPhone}`);
-    summaryLines.push(`📍 *Dirección:* ${deliveryAddress}`);
-    summaryLines.push(`💳 *Forma de Pago:* ${paymentMethod === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo al Recibir'}`);
-    summaryLines.push(`\n🛒 *DETALLE DEL PEDIDO:*`);
+    const summaryLines: string[] = [
+      `🛒 *PEDIDO COPETE EXPRESS* 🛒`,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      `👤 *Cliente:* ${customerName}`,
+      `📞 *Teléfono:* ${customerPhone}`,
+      `📍 *Dirección:* ${deliveryAddress}`,
+      `💳 *Forma de Pago:* ${paymentMethod === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo al Recibir'}`,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      `📦 *DETALLE DEL PEDIDO:*`,
+    ];
 
     for (const item of orderItems) {
       if (item.type === 'product') {
-        const prod = updatedProducts.find((p) => p.id === item.id);
+        const prod = products.find((p) => p.id === item.id);
         if (!prod || prod.stock < item.quantity) {
           return {
             success: false,
@@ -847,7 +904,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             summaryText: '',
           };
         }
-        prod.stock -= item.quantity;
+        const pIdx = updatedProducts.findIndex((p) => p.id === item.id);
+        updatedProducts[pIdx].stock -= item.quantity;
         const subtotal = prod.price * item.quantity;
         calculatedTotal += subtotal;
         saleItemsList.push({
@@ -920,7 +978,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setProductsState(updatedProducts);
-    setSalesState((prevSales) => [newSale, ...prevSales]);
+    setSalesState((prevSales) => {
+      const next = [newSale, ...prevSales];
+      saveLocalBackup({ sales: next, products: updatedProducts });
+      return next;
+    });
 
     try {
       await fetch('/api/store', {
