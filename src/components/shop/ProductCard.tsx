@@ -57,9 +57,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <h3 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors line-clamp-2 mt-0.5">
             {product.name}
           </h3>
-          <p className="text-xs text-zinc-400 line-clamp-2 mt-1 min-h-[2rem]">
-            {product.description}
-          </p>
+          {product.description && !product.description.toLowerCase().includes('factura') && (
+            <p className="text-xs text-zinc-400 line-clamp-2 mt-1">
+              {product.description}
+            </p>
+          )}
         </div>
 
         {/* Alerta Visual de Bajo Stock (< 3 Unidades) - Requisito Módulo 4 */}

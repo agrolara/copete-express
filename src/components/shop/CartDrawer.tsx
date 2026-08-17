@@ -139,16 +139,8 @@ export const CartDrawer: React.FC = () => {
             {/* Footer de Resumen y Checkout */}
             {cart.length > 0 && (
               <div className="p-5 border-t border-zinc-800 bg-zinc-900/90 space-y-4">
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-zinc-400">
-                    <span>Subtotal</span>
-                    <span>{formattedTotal}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-400">
-                    <span>Despacho Exprés</span>
-                    <span className="text-emerald-400 font-semibold">GRATIS</span>
-                  </div>
-                  <div className="pt-2 border-t border-zinc-800 flex justify-between items-center text-sm font-extrabold text-white">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center text-sm font-extrabold text-white">
                     <span>Total a Pagar</span>
                     <span className="text-lg text-purple-400">{formattedTotal}</span>
                   </div>

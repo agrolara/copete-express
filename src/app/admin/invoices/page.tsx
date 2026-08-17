@@ -256,7 +256,7 @@ export default function AdminInvoicesPage() {
           id: item.product_id,
           name: item.product_name,
           category: item.category,
-          description: `${item.product_name} ingresado mediante factura #${invoiceNumber}`,
+          description: '',
           price: item.selling_price,
           cost_price: item.cost_price,
           stock: 0,
