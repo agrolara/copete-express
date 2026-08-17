@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { Wine, Flame, Sparkles } from 'lucide-react';
+import { formatImageUrl } from '@/lib/imageUtils';
 
 interface SquareImageContainerProps {
   src: string;
@@ -23,6 +24,7 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const formattedSrc = formatImageUrl(src);
 
   const getBadgeStyle = () => {
     switch (badgeType) {
@@ -59,9 +61,9 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
       <div className="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity duration-300 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-600/30 via-transparent to-transparent pointer-events-none" />
 
       {/* Renderizado de la imagen */}
-      {!imageError && src ? (
+      {!imageError && formattedSrc ? (
         <Image
-          src={src}
+          src={formattedSrc}
           alt={alt}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"

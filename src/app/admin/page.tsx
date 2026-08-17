@@ -201,7 +201,46 @@ export default function AdminDashboardPage() {
     });
   }, [expenses, timeRange, selectedMonth]);
 
-  // 3. MÉTRICAS FINANCIERAS COMPLETAS: VENTAS, COSTOS DE MERCADERÍA, GASTOS OPERACIONALES Y UTILIDAD NETA REAL
+  // 3. FILTRADO TEMPORAL DE FACTURAS DE COMPRA
+  const filteredInvoices = useMemo(() => {
+    const now = new Date();
+
+    return invoices.filter((inv) => {
+      const invDate = new Date(inv.created_at || inv.invoice_date);
+
+      if (timeRange === 'day') {
+        return (
+          invDate.getDate() === now.getDate() &&
+          invDate.getMonth() === now.getMonth() &&
+          invDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'week') {
+        const diffTime = Math.abs(now.getTime() - invDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 7;
+      }
+
+      if (timeRange === 'month') {
+        if (selectedMonth && selectedMonth !== 'all' && selectedMonth !== 'current') {
+          const [targetYear, targetMonth] = selectedMonth.split('-').map(Number);
+          return (
+            invDate.getFullYear() === targetYear &&
+            invDate.getMonth() + 1 === targetMonth
+          );
+        }
+        return (
+          invDate.getMonth() === now.getMonth() &&
+          invDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      return true; // 'all'
+    });
+  }, [invoices, timeRange, selectedMonth]);
+
+  // 4. MÉTRICAS FINANCIERAS COMPLETAS: VENTAS, COSTOS DE MERCADERÍA, GASTOS OPERACIONALES Y COMPRAS FACTURADAS
   const financialMetrics = useMemo(() => {
     let totalRevenue = 0;
     let totalCost = 0;
@@ -232,6 +271,11 @@ export default function AdminDashboardPage() {
     });
 
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalInvoiced = filteredInvoices.reduce((sum, i) => sum + i.total_amount, 0);
+    const totalInvoicedUnits = filteredInvoices.reduce((sum, i) => sum + i.items.reduce((s, it) => s + it.quantity, 0), 0);
+    const warehouseStockValue = products.reduce((sum, p) => sum + p.stock * (p.cost_price || 0), 0);
+    const warehouseTotalUnits = products.reduce((sum, p) => sum + p.stock, 0);
+
     const grossProfit = totalRevenue - totalCost;
     const realNetProfit = grossProfit - totalExpenses;
     const realMarginPct = totalRevenue > 0 ? Math.round((realNetProfit / totalRevenue) * 100) : 0;
@@ -240,13 +284,17 @@ export default function AdminDashboardPage() {
       totalRevenue,
       totalCost,
       totalExpenses,
+      totalInvoiced,
+      totalInvoicedUnits,
+      warehouseStockValue,
+      warehouseTotalUnits,
       grossProfit,
       realNetProfit,
       realMarginPct,
     };
-  }, [filteredSales, filteredExpenses, products, promotions]);
+  }, [filteredSales, filteredExpenses, filteredInvoices, products, promotions]);
 
-  // 4. ARQUEO DE CAJA EN TIEMPO REAL: EFECTIVO VS TRANSFERENCIA
+  // 5. ARQUEO DE CAJA EN TIEMPO REAL: EFECTIVO VS TRANSFERENCIA (INCLUYENDO FACTURAS)
   const cashMetrics = useMemo(() => {
     let salesCash = 0;
     let salesTransfer = 0;
@@ -270,8 +318,19 @@ export default function AdminDashboardPage() {
       }
     });
 
-    const netCashInHand = salesCash - expensesCash;
-    const netBankTransfer = salesTransfer - expensesTransfer;
+    let invoicesCash = 0;
+    let invoicesTransfer = 0;
+
+    filteredInvoices.forEach((i) => {
+      if (i.payment_method === 'efectivo') {
+        invoicesCash += i.total_amount;
+      } else {
+        invoicesTransfer += i.total_amount;
+      }
+    });
+
+    const netCashInHand = salesCash - expensesCash - invoicesCash;
+    const netBankTransfer = salesTransfer - expensesTransfer - invoicesTransfer;
     const totalAvailable = netCashInHand + netBankTransfer;
 
     return {
@@ -279,11 +338,13 @@ export default function AdminDashboardPage() {
       salesTransfer,
       expensesCash,
       expensesTransfer,
+      invoicesCash,
+      invoicesTransfer,
       netCashInHand,
       netBankTransfer,
       totalAvailable,
     };
-  }, [filteredSales, filteredExpenses]);
+  }, [filteredSales, filteredExpenses, filteredInvoices]);
 
   const formattedRevenue = `$${financialMetrics.totalRevenue.toLocaleString('es-CL')}`;
   const formattedCost = `$${financialMetrics.totalCost.toLocaleString('es-CL')}`;
@@ -707,9 +768,11 @@ export default function AdminDashboardPage() {
               <h4 className="text-2xl font-black text-white mt-1">
                 ${cashMetrics.netCashInHand.toLocaleString('es-CL')}
               </h4>
-              <span className="text-[11px] text-zinc-400 block mt-1">
-                Ventas: +${cashMetrics.salesCash.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesCash.toLocaleString('es-CL')}
-              </span>
+              <div className="text-[11px] text-zinc-400 mt-1 space-y-0.5">
+                <span className="text-emerald-400 font-bold block">Ventas: +${cashMetrics.salesCash.toLocaleString('es-CL')}</span>
+                {cashMetrics.expensesCash > 0 && <span className="text-red-400 block">Gastos: -${cashMetrics.expensesCash.toLocaleString('es-CL')}</span>}
+                {cashMetrics.invoicesCash > 0 && <span className="text-orange-400 block">Facturas: -${cashMetrics.invoicesCash.toLocaleString('es-CL')}</span>}
+              </div>
             </div>
             <div className="p-2.5 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
               <DollarSign className="w-5 h-5" />
@@ -724,9 +787,11 @@ export default function AdminDashboardPage() {
               <h4 className="text-2xl font-black text-white mt-1">
                 ${cashMetrics.netBankTransfer.toLocaleString('es-CL')}
               </h4>
-              <span className="text-[11px] text-zinc-400 block mt-1">
-                Ventas: +${cashMetrics.salesTransfer.toLocaleString('es-CL')} | Gastos: -${cashMetrics.expensesTransfer.toLocaleString('es-CL')}
-              </span>
+              <div className="text-[11px] text-zinc-400 mt-1 space-y-0.5">
+                <span className="text-purple-300 font-bold block">Ventas: +${cashMetrics.salesTransfer.toLocaleString('es-CL')}</span>
+                {cashMetrics.expensesTransfer > 0 && <span className="text-red-400 block">Gastos: -${cashMetrics.expensesTransfer.toLocaleString('es-CL')}</span>}
+                {cashMetrics.invoicesTransfer > 0 && <span className="text-orange-400 block">Facturas: -${cashMetrics.invoicesTransfer.toLocaleString('es-CL')}</span>}
+              </div>
             </div>
             <div className="p-2.5 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
               <CreditCard className="w-5 h-5" />
@@ -749,6 +814,49 @@ export default function AdminDashboardPage() {
               <Layers className="w-5 h-5" />
             </div>
           </div>
+        </div>
+
+        {/* Resumen de Compras Facturadas y Valorización de Stock en Bodega */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-zinc-800/80">
+          <Link
+            href="/admin/invoices"
+            className="p-4 rounded-2xl bg-zinc-950 border border-purple-500/30 hover:border-purple-500/60 transition-all flex items-center justify-between group"
+          >
+            <div>
+              <span className="text-xs font-bold text-purple-300 uppercase tracking-wider block">
+                📦 Total Compras Facturadas (Inversión en Inventario)
+              </span>
+              <h4 className="text-xl font-black text-white mt-1">
+                ${financialMetrics.totalInvoiced.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[11px] text-purple-400 font-bold block mt-0.5">
+                +{financialMetrics.totalInvoicedUnits.toLocaleString('es-CL')} un. abastecidas mediante facturas →
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-purple-600/20 text-purple-400 group-hover:scale-105 transition-transform">
+              <FileText className="w-5 h-5" />
+            </div>
+          </Link>
+
+          <Link
+            href="/admin/products"
+            className="p-4 rounded-2xl bg-zinc-950 border border-emerald-500/30 hover:border-emerald-500/60 transition-all flex items-center justify-between group"
+          >
+            <div>
+              <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider block">
+                🏢 Valorización de Stock en Bodega
+              </span>
+              <h4 className="text-xl font-black text-emerald-400 mt-1">
+                ${financialMetrics.warehouseStockValue.toLocaleString('es-CL')}
+              </h4>
+              <span className="text-[11px] text-emerald-400 font-bold block mt-0.5">
+                {financialMetrics.warehouseTotalUnits.toLocaleString('es-CL')} un. físicas disponibles en catálogo →
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-600/20 text-emerald-400 group-hover:scale-105 transition-transform">
+              <PackageCheck className="w-5 h-5" />
+            </div>
+          </Link>
         </div>
       </section>
 

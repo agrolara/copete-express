@@ -70,6 +70,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, store });
     }
 
+    if (action === 'UPDATE_INVOICE') {
+      const { invoice, updatedProducts } = payload;
+      store.invoices = (store.invoices || []).map((i) => (i.id === invoice.id ? invoice : i));
+      if (updatedProducts) {
+        store.products = updatedProducts;
+      }
+      saveStore(store);
+      return NextResponse.json({ success: true, store });
+    }
+
     if (action === 'DELETE_INVOICE') {
       const { invoiceId, updatedProducts } = payload;
       store.invoices = (store.invoices || []).filter((i) => i.id !== invoiceId);

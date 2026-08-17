@@ -6,6 +6,7 @@ import { useCart } from '@/context/CartContext';
 import { Product } from '@/types';
 import { SquareImageContainer } from '@/components/ui/SquareImageContainer';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
+import { formatImageUrl } from '@/lib/imageUtils';
 import {
   Plus,
   Edit2,
@@ -80,13 +81,14 @@ export default function AdminProductsPage() {
 
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanedImageUrl = formatImageUrl(imageUrl);
 
     if (editingProduct) {
       // Actualizar
       setProducts((prev) =>
         prev.map((p) =>
           p.id === editingProduct.id
-            ? { ...p, name, description, category, price, cost_price: costPrice, stock, image_url: imageUrl }
+            ? { ...p, name, description, category, price, cost_price: costPrice, stock, image_url: cleanedImageUrl }
             : p
         )
       );
@@ -100,7 +102,7 @@ export default function AdminProductsPage() {
         price,
         cost_price: costPrice,
         stock,
-        image_url: imageUrl,
+        image_url: cleanedImageUrl,
         is_active: true,
       };
       setProducts((prev) => [newProd, ...prev]);
@@ -239,15 +241,22 @@ export default function AdminProductsPage() {
         })}
       </div>
 
-      {/* MODAL CREAR / EDITAR PRODUCTO CON COSTO UNITARIO Y PREVISUALIZADOR 1:1 */}
+      {/* Modal Add / Edit Product */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-extrabold text-white">
-                {editingProduct ? 'Editar Producto & Costo' : 'Agregar Nuevo Producto'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="relative bg-zinc-900 border border-purple-500/40 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Header Sticky */}
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-purple-400" />
+                <h3 className="text-base font-extrabold text-white">
+                  {editingProduct ? 'Editar Producto del Catálogo' : 'Agregar Nuevo Producto'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -299,12 +308,12 @@ export default function AdminProductsPage() {
                     required
                     value={stock}
                     onChange={(e) => setStock(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-bold"
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-bold font-mono"
                   />
                 </div>
               </div>
 
-              {/* CAMPOS DE PRECIO DE VENTA Y COSTO UNITARIO */}
+              {/* CAMPOS DE PRECIO DE VENTA Y COSTO UNITARIO CON DECIMALES */}
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-zinc-950 border border-zinc-800">
                 <div>
                   <label className="block text-zinc-300 font-bold mb-1">Precio Venta ($ CLP)</label>
@@ -313,20 +322,21 @@ export default function AdminProductsPage() {
                     min="0"
                     required
                     value={price}
-                    onChange={(e) => setPrice(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-black text-sm"
+                    onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-black text-sm font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-orange-400 font-bold mb-1">Costo Unitario ($ CLP)</label>
+                  <label className="block text-orange-400 font-bold mb-1">Costo Unitario ($) (Decimales)</label>
                   <input
                     type="number"
+                    step="0.01"
                     min="0"
                     required
                     value={costPrice}
-                    onChange={(e) => setCostPrice(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-orange-500/40 text-orange-400 font-black text-sm"
+                    onChange={(e) => setCostPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-orange-500/40 text-orange-400 font-black text-sm font-mono"
                   />
                 </div>
               </div>

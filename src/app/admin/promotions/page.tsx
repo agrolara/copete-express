@@ -5,16 +5,17 @@ import { useCart } from '@/context/CartContext';
 import { Promotion, PromotionItem } from '@/types';
 import { SquareImageContainer } from '@/components/ui/SquareImageContainer';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
+import { formatImageUrl } from '@/lib/imageUtils';
 import {
   Sparkles,
   Plus,
   Trash2,
   Edit2,
-  Crop,
-  Check,
-  X,
   PackageCheck,
+  Crop,
+  X,
   PlusCircle,
+  TrendingDown,
 } from 'lucide-react';
 
 export default function AdminPromotionsPage() {
@@ -98,6 +99,8 @@ export default function AdminPromotionsPage() {
       };
     });
 
+    const cleanedImageUrl = formatImageUrl(imageUrl);
+
     if (editingPromo) {
       setPromotions((prev) =>
         prev.map((p) =>
@@ -107,7 +110,7 @@ export default function AdminPromotionsPage() {
                 name,
                 description,
                 promo_price: promoPrice,
-                image_url: imageUrl,
+                image_url: cleanedImageUrl,
                 items: formattedItems,
               }
             : p
@@ -119,7 +122,7 @@ export default function AdminPromotionsPage() {
         name,
         description,
         promo_price: promoPrice,
-        image_url: imageUrl,
+        image_url: cleanedImageUrl,
         is_active: true,
         items: formattedItems,
       };
@@ -234,13 +237,20 @@ export default function AdminPromotionsPage() {
 
       {/* Modal Add / Edit Promo */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <h3 className="text-base font-extrabold text-white">
-                {editingPromo ? 'Editar Promoción Pack' : 'Crear Nueva Promoción'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="relative bg-zinc-900 border border-orange-500/40 rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+            {/* Header Sticky */}
+            <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-orange-400" />
+                <h3 className="text-base font-extrabold text-white">
+                  {editingPromo ? 'Editar Promoción Pack' : 'Crear Nueva Promoción'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>

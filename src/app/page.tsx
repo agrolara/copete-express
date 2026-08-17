@@ -7,6 +7,7 @@ import { ProductCard } from '@/components/shop/ProductCard';
 import { PromotionCard } from '@/components/shop/PromotionCard';
 import { useCart } from '@/context/CartContext';
 import { Sparkles, Flame, Wine, ShieldCheck, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
+import { formatImageUrl } from '@/lib/imageUtils';
 import Image from 'next/image';
 
 export default function HomePage() {
@@ -150,7 +151,7 @@ export default function HomePage() {
               {/* Tarjeta Destacada ROTATIVA DINÁMICAMENTE según el Más Vendido */}
               <div className="relative aspect-square max-w-sm mx-auto w-full rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-neon-purple group">
                 <Image
-                  src={topSellingItem.image_url}
+                  src={formatImageUrl(topSellingItem.image_url)}
                   alt={topSellingItem.name}
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-500"

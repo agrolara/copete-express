@@ -3,10 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import { useCart } from '@/context/CartContext';
 import { Invoice, InvoiceItem, Product } from '@/types';
+import { formatImageUrl } from '@/lib/imageUtils';
 import {
   FileText,
   Plus,
   Trash2,
+  Edit2,
   Package,
   Calendar,
   Building2,
@@ -24,10 +26,11 @@ import {
 } from 'lucide-react';
 
 export default function AdminInvoicesPage() {
-  const { products, invoices, addInvoice, deleteInvoice } = useCart();
+  const { products, invoices, addInvoice, updateInvoice, deleteInvoice } = useCart();
 
-  // Estados para nuevo ingreso de factura
+  // Estados para nuevo ingreso / edición de factura
   const [isNewInvoiceOpen, setIsNewInvoiceOpen] = useState(false);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState('');
   const [supplierRut, setSupplierRut] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -67,6 +70,17 @@ export default function AdminInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Formato monetario que soporta decimales
+  const formatMoney = (val: number) => {
+    return (
+      '$' +
+      Number(val || 0).toLocaleString('es-CL', {
+        minimumFractionDigits: val % 1 !== 0 ? 2 : 0,
+        maximumFractionDigits: 2,
+      })
+    );
+  };
+
   // Proveedores frecuentes extraídos de las facturas previas
   const frequentSuppliers = useMemo(() => {
     const suppliers = new Set<string>();
@@ -78,7 +92,8 @@ export default function AdminInvoicesPage() {
 
   // Total calculado de la factura actual
   const currentInvoiceTotal = useMemo(() => {
-    return invoiceItems.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
+    const total = invoiceItems.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
+    return Math.round(total * 100) / 100;
   }, [invoiceItems]);
 
   // Métricas generales de facturas
@@ -91,6 +106,43 @@ export default function AdminInvoicesPage() {
       return sum + inv.items.reduce((iSum, it) => iSum + it.quantity, 0);
     }, 0);
   }, [invoices]);
+
+  // Abrir modal para crear nueva factura limpia
+  const handleOpenCreateInvoice = () => {
+    setEditingInvoiceId(null);
+    setSupplierName('');
+    setSupplierRut('');
+    setInvoiceNumber('');
+    setInvoiceDate(new Date().toISOString().split('T')[0]);
+    setPaymentMethod('transferencia');
+    setNotes('');
+    setInvoiceItems([]);
+    setIsNewInvoiceOpen(true);
+  };
+
+  // Abrir modal para editar factura existente
+  const handleOpenEditInvoice = (inv: Invoice) => {
+    setEditingInvoiceId(inv.id);
+    setSupplierName(inv.supplier_name);
+    setSupplierRut(inv.supplier_rut || '');
+    setInvoiceNumber(inv.invoice_number);
+    setInvoiceDate(inv.invoice_date);
+    setPaymentMethod(inv.payment_method);
+    setNotes(inv.notes || '');
+    setInvoiceItems(
+      inv.items.map((it) => ({
+        id: it.id || crypto.randomUUID(),
+        product_id: it.product_id,
+        product_name: it.product_name,
+        category: it.category || 'Otros',
+        quantity: it.quantity,
+        cost_price: it.cost_price,
+        selling_price: it.selling_price || 0,
+        is_new_product: !!it.is_new_product,
+      }))
+    );
+    setIsNewInvoiceOpen(true);
+  };
 
   // Manejar selección de producto existente para auto-rellenar costo y precio
   const handleSelectExistingProduct = (productId: string) => {
@@ -118,8 +170,8 @@ export default function AdminInvoicesPage() {
           product_name: newProductName.trim(),
           category: newProductCategory,
           quantity: Math.max(1, itemQuantity),
-          cost_price: newProductCost,
-          selling_price: newProductPrice || Math.round(newProductCost * 1.5),
+          cost_price: Number(newProductCost),
+          selling_price: Number(newProductPrice) || Math.round(newProductCost * 1.5),
           is_new_product: true,
           image_url: 'https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80',
         },
@@ -140,8 +192,8 @@ export default function AdminInvoicesPage() {
           product_name: prod.name,
           category: prod.category,
           quantity: Math.max(1, itemQuantity),
-          cost_price: itemCost > 0 ? itemCost : prod.cost_price || 0,
-          selling_price: itemSellingPrice > 0 ? itemSellingPrice : prod.price,
+          cost_price: itemCost > 0 ? Number(itemCost) : prod.cost_price || 0,
+          selling_price: itemSellingPrice > 0 ? Number(itemSellingPrice) : prod.price,
           is_new_product: false,
         },
       ]);
@@ -161,7 +213,19 @@ export default function AdminInvoicesPage() {
     setInvoiceItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Guardar Factura e Impactar Inventario
+  const handleUpdateItemQuantity = (index: number, qty: number) => {
+    setInvoiceItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, qty) } : item))
+    );
+  };
+
+  const handleUpdateItemCost = (index: number, cost: number) => {
+    setInvoiceItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, cost_price: Math.max(0, cost) } : item))
+    );
+  };
+
+  // Guardar Factura (Crear o Actualizar) e Impactar Inventario
   const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierName.trim() || !invoiceNumber.trim()) {
@@ -188,7 +252,7 @@ export default function AdminInvoicesPage() {
           description: `${item.product_name} ingresado mediante factura #${invoiceNumber}`,
           price: item.selling_price,
           cost_price: item.cost_price,
-          stock: 0, // addInvoice sumará la cantidad
+          stock: 0,
           image_url: item.image_url || 'https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80',
           is_active: true,
         };
@@ -202,31 +266,51 @@ export default function AdminInvoicesPage() {
         category: item.category,
         quantity: item.quantity,
         cost_price: item.cost_price,
-        total_cost: item.cost_price * item.quantity,
+        total_cost: Math.round(item.cost_price * item.quantity * 100) / 100,
         selling_price: item.selling_price,
         is_new_product: item.is_new_product,
       });
     });
 
-    const result = await addInvoice(
-      {
-        invoice_number: invoiceNumber.trim(),
-        supplier_name: supplierName.trim(),
-        supplier_rut: supplierRut.trim(),
-        invoice_date: invoiceDate,
-        payment_method: paymentMethod,
-        total_amount: currentInvoiceTotal,
-        items: formattedInvoiceItems,
-        notes: notes.trim(),
-      },
-      newProductsToRegister
-    );
+    let result;
+    if (editingInvoiceId) {
+      const existing = invoices.find((i) => i.id === editingInvoiceId);
+      result = await updateInvoice(
+        {
+          id: editingInvoiceId,
+          created_at: existing?.created_at || new Date().toISOString(),
+          invoice_number: invoiceNumber.trim(),
+          supplier_name: supplierName.trim(),
+          supplier_rut: supplierRut.trim(),
+          invoice_date: invoiceDate,
+          payment_method: paymentMethod,
+          total_amount: currentInvoiceTotal,
+          items: formattedInvoiceItems,
+          notes: notes.trim(),
+        },
+        newProductsToRegister
+      );
+    } else {
+      result = await addInvoice(
+        {
+          invoice_number: invoiceNumber.trim(),
+          supplier_name: supplierName.trim(),
+          supplier_rut: supplierRut.trim(),
+          invoice_date: invoiceDate,
+          payment_method: paymentMethod,
+          total_amount: currentInvoiceTotal,
+          items: formattedInvoiceItems,
+          notes: notes.trim(),
+        },
+        newProductsToRegister
+      );
+    }
 
     setLoading(false);
 
     if (result.success) {
-      alert(result.message);
       setIsNewInvoiceOpen(false);
+      setEditingInvoiceId(null);
       setSupplierName('');
       setSupplierRut('');
       setInvoiceNumber('');
@@ -266,15 +350,12 @@ export default function AdminInvoicesPage() {
             <span>Ingreso de Facturas & Abastecimiento</span>
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Método principal para ingresar mercadería, registrar facturas de proveedores, crear nuevos productos y actualizar costos unitarios.
+            Método principal para ingresar mercadería, registrar facturas de proveedores, editar compras y actualizar costos unitarios.
           </p>
         </div>
 
         <button
-          onClick={() => {
-            setInvoiceItems([]);
-            setIsNewInvoiceOpen(true);
-          }}
+          onClick={handleOpenCreateInvoice}
           className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-orange-500 text-white font-extrabold text-xs shadow-neon-purple hover:opacity-95 transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -284,57 +365,59 @@ export default function AdminInvoicesPage() {
 
       {/* TARJETAS KPI DE FACTURACIÓN Y COMPRAS */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-purple-500/40 shadow-neon-purple flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-purple-500/40 shadow-neon-purple flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Total Compras Facturadas</span>
-            <h3 className="text-2xl font-black text-white mt-1">
-              ${totalInvoicedAmount.toLocaleString('es-CL')}
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-300">Total Compras Facturadas</span>
+            <h3 className="text-3xl font-black text-white mt-1.5">
+              {formatMoney(totalInvoicedAmount)}
             </h3>
-            <span className="text-[10px] text-purple-400 font-bold block mt-1">
+            <span className="text-[11px] text-purple-400 font-bold block mt-1">
               {invoices.length} facturas registradas
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+          <div className="p-3.5 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-orange-500/40 shadow-neon-orange flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-orange-500/40 shadow-neon-orange flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Proveedores Activos</span>
-            <h3 className="text-2xl font-black text-orange-400 mt-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-orange-300">Proveedores Activos</span>
+            <h3 className="text-3xl font-black text-orange-400 mt-1.5">
               {frequentSuppliers.length} Proveedores
             </h3>
-            <span className="text-[10px] text-zinc-500 block mt-1">Empresas emisoras registradas</span>
+            <span className="text-[11px] text-zinc-400 block mt-1">Empresas emisoras registradas</span>
           </div>
-          <div className="p-3 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
+          <div className="p-3.5 rounded-2xl bg-orange-600/20 text-orange-400 border border-orange-500/30">
             <Building2 className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-zinc-900/90 border border-emerald-500/40 shadow-neon-emerald flex items-center justify-between">
+        <div className="p-6 rounded-3xl bg-zinc-900/90 border border-emerald-500/40 shadow-neon-emerald flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-zinc-400">Unidades Abastecidas</span>
-            <h3 className="text-2xl font-black text-emerald-400 mt-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">Unidades Abastecidas</span>
+            <h3 className="text-3xl font-black text-emerald-400 mt-1.5">
               +{totalUnitsPurchased.toLocaleString('es-CL')} un.
             </h3>
-            <span className="text-[10px] text-emerald-400 font-bold block mt-1">Mercadería cargada a bodega</span>
+            <span className="text-[11px] text-emerald-400 font-bold block mt-1">Mercadería cargada a bodega</span>
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
+          <div className="p-3.5 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
             <Package className="w-6 h-6" />
           </div>
         </div>
       </section>
 
-      {/* FORMULARIO MODAL PRINCIPAL DE INGRESO DE FACTURA */}
+      {/* FORMULARIO MODAL DE INGRESO / EDICIÓN DE FACTURA */}
       {isNewInvoiceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="relative bg-zinc-900 border border-purple-500/30 rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-auto max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-zinc-900 border border-purple-500/40 rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-auto max-h-[90vh] overflow-y-auto">
             {/* Header Sticky */}
             <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <FileText className="w-6 h-6 text-purple-400" />
-                <h3 className="text-lg font-black text-white">Ingresar Factura de Proveedor</h3>
+                <h3 className="text-lg font-black text-white">
+                  {editingInvoiceId ? `Editar Factura #${invoiceNumber}` : 'Ingresar Factura de Proveedor'}
+                </h3>
               </div>
               <button
                 onClick={() => setIsNewInvoiceOpen(false)}
@@ -355,7 +438,7 @@ export default function AdminInvoicesPage() {
                     type="text"
                     required
                     list="suppliers-list"
-                    placeholder="Ej: Distribuidora CCU"
+                    placeholder="Ej: Distribuidora Dorsal L"
                     value={supplierName}
                     onChange={(e) => setSupplierName(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
@@ -385,7 +468,7 @@ export default function AdminInvoicesPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Ej: FAC-10294"
+                    placeholder="Ej: 1141050"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
@@ -406,7 +489,7 @@ export default function AdminInvoicesPage() {
 
               {/* Forma de Pago y Notas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+                <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-1.5">
                   <label className="block text-xs font-bold text-white flex items-center gap-1.5">
                     <CreditCard className="w-4 h-4 text-orange-400" />
                     <span>Medio de Pago de la Factura</span>
@@ -475,7 +558,7 @@ export default function AdminInvoicesPage() {
                     <Package className="w-8 h-8 mx-auto text-zinc-600" />
                     <p className="font-semibold text-zinc-400">Aún no has agregado ningún producto a esta factura.</p>
                     <p className="text-[11px] text-zinc-500">
-                      Haz clic en &quot;+ Agregar Producto&quot; para seleccionar del catálogo o crear nuevos productos que se guardarán automáticamente.
+                      Haz clic en &quot;+ Agregar Producto&quot; para seleccionar del catálogo o crear nuevos productos con costos decimales exactos.
                     </p>
                   </div>
                 ) : (
@@ -485,8 +568,8 @@ export default function AdminInvoicesPage() {
                         <tr>
                           <th className="p-3">Producto</th>
                           <th className="p-3">Tipo</th>
-                          <th className="p-3 text-center">Cantidad</th>
-                          <th className="p-3 text-right">Costo Unitario ($)</th>
+                          <th className="p-3 text-center">Cantidad (un.)</th>
+                          <th className="p-3 text-right">Costo Unit. ($) (Soporta Decimales)</th>
                           <th className="p-3 text-right">Total Ítem ($)</th>
                           <th className="p-3 text-right">Precio Venta Catálogo</th>
                           <th className="p-3 text-right">Acción</th>
@@ -507,21 +590,37 @@ export default function AdminInvoicesPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="p-3 text-center font-extrabold text-white">+{item.quantity} un.</td>
+                            <td className="p-3 text-center font-extrabold text-white">
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateItemQuantity(idx, parseInt(e.target.value) || 1)}
+                                className="w-16 px-2 py-1 text-center bg-zinc-900 border border-zinc-700 rounded-lg text-white font-mono"
+                              />
+                            </td>
                             <td className="p-3 text-right font-mono text-orange-400">
-                              ${item.cost_price.toLocaleString('es-CL')}
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={item.cost_price}
+                                onChange={(e) => handleUpdateItemCost(idx, parseFloat(e.target.value) || 0)}
+                                className="w-24 px-2 py-1 text-right bg-zinc-900 border border-zinc-700 rounded-lg text-orange-300 font-mono"
+                              />
                             </td>
                             <td className="p-3 text-right font-mono font-extrabold text-white">
-                              ${(item.cost_price * item.quantity).toLocaleString('es-CL')}
+                              {formatMoney(item.cost_price * item.quantity)}
                             </td>
                             <td className="p-3 text-right font-mono text-zinc-400">
-                              ${item.selling_price.toLocaleString('es-CL')}
+                              {formatMoney(item.selling_price)}
                             </td>
                             <td className="p-3 text-right">
                               <button
                                 type="button"
                                 onClick={() => handleRemoveInvoiceItem(idx)}
                                 className="p-1.5 rounded-lg text-red-400 hover:bg-red-950/60 transition-colors"
+                                title="Eliminar ítem"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -539,7 +638,7 @@ export default function AdminInvoicesPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-zinc-400">Total Factura:</span>
                   <span className="text-2xl font-black text-purple-400">
-                    ${currentInvoiceTotal.toLocaleString('es-CL')}
+                    {formatMoney(currentInvoiceTotal)}
                   </span>
                 </div>
 
@@ -557,7 +656,13 @@ export default function AdminInvoicesPage() {
                     className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-orange-500 text-white font-black text-xs shadow-neon-purple hover:opacity-95 transition-all disabled:opacity-50"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{loading ? 'Procesando...' : 'Guardar Factura y Actualizar Stock'}</span>
+                    <span>
+                      {loading
+                        ? 'Procesando...'
+                        : editingInvoiceId
+                        ? 'Guardar Cambios de Factura'
+                        : 'Guardar Factura y Actualizar Stock'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -566,7 +671,7 @@ export default function AdminInvoicesPage() {
         </div>
       )}
 
-      {/* SUB-MODAL PARA SELECCIONAR O CREAR PRODUCTO EN LA FACTURA */}
+      {/* SUB-MODAL PARA SELECCIONAR O CREAR PRODUCTO EN LA FACTURA CON COSTOS DECIMALES */}
       {isItemModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
@@ -634,7 +739,7 @@ export default function AdminInvoicesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Cantidad Comprada *</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Cantidad Comprada (un.) *</label>
                     <input
                       type="number"
                       min="1"
@@ -647,13 +752,14 @@ export default function AdminInvoicesPage() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unitario Factura ($) *</label>
+                    <label className="block text-zinc-400 mb-1 font-bold">Costo Unitario ($) (Decimales) *</label>
                     <input
                       type="number"
+                      step="0.01"
                       min="0"
                       value={newProductCost || ''}
-                      onChange={(e) => setNewProductCost(parseInt(e.target.value) || 0)}
-                      placeholder="Costo neto en factura"
+                      onChange={(e) => setNewProductCost(parseFloat(e.target.value) || 0)}
+                      placeholder="Ej: 865.50"
                       className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
@@ -663,7 +769,7 @@ export default function AdminInvoicesPage() {
                       type="number"
                       min="0"
                       value={newProductPrice || ''}
-                      onChange={(e) => setNewProductPrice(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || 0)}
                       placeholder="Precio venta público"
                       className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
@@ -683,7 +789,7 @@ export default function AdminInvoicesPage() {
                     <option value="">-- Elige un producto --</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} (Stock Actual: {p.stock} un. | Costo: ${p.cost_price || 0})
+                        {p.name} (Stock Actual: {p.stock} un. | Costo: {formatMoney(p.cost_price || 0)})
                       </option>
                     ))}
                   </select>
@@ -704,9 +810,10 @@ export default function AdminInvoicesPage() {
                     <label className="block text-zinc-400 mb-1 font-bold">Costo Unit. ($)</label>
                     <input
                       type="number"
+                      step="0.01"
                       min="0"
                       value={itemCost || ''}
-                      onChange={(e) => setItemCost(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setItemCost(parseFloat(e.target.value) || 0)}
                       className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
@@ -716,7 +823,7 @@ export default function AdminInvoicesPage() {
                       type="number"
                       min="0"
                       value={itemSellingPrice || ''}
-                      onChange={(e) => setItemSellingPrice(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setItemSellingPrice(parseFloat(e.target.value) || 0)}
                       className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-mono"
                     />
                   </div>
@@ -795,18 +902,29 @@ export default function AdminInvoicesPage() {
                         </span>
                       </td>
                       <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                          inv.payment_method === 'transferencia'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        }`}>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            inv.payment_method === 'transferencia'
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
                           {inv.payment_method === 'transferencia' ? 'Transferencia' : 'Efectivo'}
                         </span>
                       </td>
-                      <td className="p-4 text-right font-black text-white">
-                        ${inv.total_amount.toLocaleString('es-CL')}
+                      <td className="p-4 text-right font-black text-white font-mono text-sm">
+                        {formatMoney(inv.total_amount)}
                       </td>
                       <td className="p-4 text-right space-x-2">
+                        {/* Botón Editar Factura */}
+                        <button
+                          onClick={() => handleOpenEditInvoice(inv)}
+                          className="p-1.5 rounded-lg bg-orange-600/20 hover:bg-orange-600 text-orange-300 hover:text-white transition-colors"
+                          title="Editar Factura y Productos"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {/* Botón Ver Detalle */}
                         <button
                           onClick={() => setSelectedInvoice(inv)}
                           className="p-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white transition-colors"
@@ -814,6 +932,7 @@ export default function AdminInvoicesPage() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {/* Botón Eliminar */}
                         <button
                           onClick={() => handleDeleteInvoice(inv.id)}
                           className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-400 transition-colors"
@@ -831,7 +950,7 @@ export default function AdminInvoicesPage() {
         </div>
       </section>
 
-      {/* MODAL DETALLE DE FACTURA (MEJORADO CON HEADER STICKY Y DISEÑO ELEGANTE) */}
+      {/* MODAL DETALLE DE FACTURA */}
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
           <div className="relative bg-zinc-900 border border-purple-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
@@ -843,12 +962,25 @@ export default function AdminInvoicesPage() {
                   Detalle Factura #{selectedInvoice.invoice_number}
                 </h3>
               </div>
-              <button
-                onClick={() => setSelectedInvoice(null)}
-                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const inv = selectedInvoice;
+                    setSelectedInvoice(null);
+                    handleOpenEditInvoice(inv);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-orange-600/30 hover:bg-orange-600 text-orange-300 hover:text-white text-xs font-bold transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Editar</span>
+                </button>
+                <button
+                  onClick={() => setSelectedInvoice(null)}
+                  className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 text-xs">
@@ -870,11 +1002,13 @@ export default function AdminInvoicesPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-zinc-400">Medio de Pago:</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    selectedInvoice.payment_method === 'transferencia'
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  }`}>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      selectedInvoice.payment_method === 'transferencia'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}
+                  >
                     {selectedInvoice.payment_method === 'transferencia' ? 'Transferencia Bancaria' : 'Efectivo'}
                   </span>
                 </div>
@@ -899,11 +1033,11 @@ export default function AdminInvoicesPage() {
                       <div>
                         <span className="font-bold text-white block">{it.product_name}</span>
                         <span className="text-zinc-400 text-[10px]">
-                          +{it.quantity} un. x ${it.cost_price.toLocaleString('es-CL')} (Costo Unitario)
+                          +{it.quantity} un. x {formatMoney(it.cost_price)} (Costo Unitario)
                         </span>
                       </div>
                       <span className="font-mono font-extrabold text-orange-400 text-sm">
-                        ${it.total_cost.toLocaleString('es-CL')}
+                        {formatMoney(it.total_cost)}
                       </span>
                     </div>
                   ))}
@@ -913,8 +1047,8 @@ export default function AdminInvoicesPage() {
               {/* Total Factura */}
               <div className="pt-3 border-t border-zinc-800 flex justify-between items-center text-sm">
                 <span className="font-bold text-white">Total Factura:</span>
-                <span className="text-2xl font-black text-purple-400">
-                  ${selectedInvoice.total_amount.toLocaleString('es-CL')}
+                <span className="text-2xl font-black text-purple-400 font-mono">
+                  {formatMoney(selectedInvoice.total_amount)}
                 </span>
               </div>
             </div>

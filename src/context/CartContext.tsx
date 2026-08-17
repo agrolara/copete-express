@@ -46,6 +46,10 @@ interface CartContextType {
     invoiceData: Omit<Invoice, 'id' | 'created_at'>,
     newProducts?: Product[]
   ) => Promise<{ success: boolean; message: string }>;
+  updateInvoice: (
+    invoiceData: Invoice,
+    newProducts?: Product[]
+  ) => Promise<{ success: boolean; message: string }>;
   deleteInvoice: (invoiceId: string, revertStock?: boolean) => void;
   addExpense: (expenseData: Omit<Expense, 'id' | 'created_at'>) => Promise<{ success: boolean; message: string }>;
   deleteExpense: (expenseId: string) => void;
@@ -274,6 +278,77 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e: any) {
       console.error('Error procesando factura:', e);
       return { success: false, message: e.message || 'Error al ingresar factura.' };
+    }
+  };
+
+  // Actualizar Factura Existente y recalcular stock y costos
+  const updateInvoice = async (
+    updatedInvoice: Invoice,
+    newProducts: Product[] = []
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const oldInvoice = invoices.find((i) => i.id === updatedInvoice.id);
+      let updatedProducts = [...products];
+
+      // 1. Agregar nuevos productos si se crearon durante la edición
+      if (newProducts && newProducts.length > 0) {
+        newProducts.forEach((newProd) => {
+          const exists = updatedProducts.some(
+            (p) => p.id === newProd.id || p.name.toLowerCase() === newProd.name.toLowerCase()
+          );
+          if (!exists) {
+            updatedProducts.push(newProd);
+          }
+        });
+      }
+
+      // 2. Revertir el stock de la versión anterior de la factura
+      if (oldInvoice) {
+        oldInvoice.items.forEach((oldItem) => {
+          const pIdx = updatedProducts.findIndex((p) => p.id === oldItem.product_id);
+          if (pIdx > -1) {
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              stock: Math.max(0, updatedProducts[pIdx].stock - oldItem.quantity),
+            };
+          }
+        });
+      }
+
+      // 3. Aplicar las nuevas cantidades y costos unitarios
+      updatedInvoice.items.forEach((item) => {
+        const pIdx = updatedProducts.findIndex(
+          (p) => p.id === item.product_id || p.name.toLowerCase() === item.product_name.toLowerCase()
+        );
+        if (pIdx > -1) {
+          updatedProducts[pIdx] = {
+            ...updatedProducts[pIdx],
+            stock: updatedProducts[pIdx].stock + item.quantity,
+            cost_price: item.cost_price,
+            price: item.selling_price || updatedProducts[pIdx].price,
+          };
+        }
+      });
+
+      setProductsState(updatedProducts);
+      setInvoicesState((prev) => prev.map((inv) => (inv.id === updatedInvoice.id ? updatedInvoice : inv)));
+
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_INVOICE',
+          payload: { invoice: updatedInvoice, updatedProducts },
+        }),
+      });
+
+      return {
+        success: true,
+        message: '¡Factura modificada con éxito! El inventario y los costos fueron recalculados.',
+      };
+    } catch (e: any) {
+      console.error('Error actualizando factura:', e);
+      return { success: false, message: e.message || 'Error al actualizar factura.' };
     }
   };
 
@@ -704,6 +779,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setExpenses,
         deleteSale,
         addInvoice,
+        updateInvoice,
         deleteInvoice,
         addExpense,
         deleteExpense,
