@@ -93,6 +93,19 @@ export default function AdminDashboardPage() {
   const [editWaNum, setEditWaNum] = useState(whatsappNumber);
   const [editBank, setEditBank] = useState(bankDetails);
 
+  // Productos y Promociones ordenados ALFABÉTICAMENTE A-Z
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) =>
+      a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+    );
+  }, [products]);
+
+  const sortedPromotions = useMemo(() => {
+    return [...promotions].sort((a, b) =>
+      a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+    );
+  }, [promotions]);
+
   // Generar lista dinámica de meses disponibles en el historial (Mes Actual + Meses Anteriores)
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -1091,17 +1104,13 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <span className="text-xs font-bold text-white block">
-                    Tiquea los Productos o Packs que solicitó el cliente:
-                  </span>
-
-                  {promotions.length > 0 && (
+                  {sortedPromotions.length > 0 && (
                     <div className="space-y-2">
                       <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider block">
-                        Packs Promocionales
+                        Packs Promocionales (A-Z)
                       </span>
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {promotions.map((promo) => {
+                        {sortedPromotions.map((promo) => {
                           const state = selectedItems[promo.id] || { selected: false, quantity: 1 };
                           return (
                             <div
@@ -1150,10 +1159,10 @@ export default function AdminDashboardPage() {
 
                   <div className="space-y-2">
                     <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider block">
-                      Productos Individuales
+                      Productos Individuales (A-Z)
                     </span>
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {products.map((prod) => {
+                      {sortedProducts.map((prod) => {
                         const state = selectedItems[prod.id] || { selected: false, quantity: 1 };
                         return (
                           <div

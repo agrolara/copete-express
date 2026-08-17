@@ -81,6 +81,13 @@ export default function AdminInvoicesPage() {
     );
   };
 
+  // Productos ordenados ALFABÉTICAMENTE A-Z para todas las listas desplegables
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) =>
+      a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+    );
+  }, [products]);
+
   // Proveedores frecuentes extraídos de las facturas previas
   const frequentSuppliers = useMemo(() => {
     const suppliers = new Set<string>();
@@ -780,14 +787,14 @@ export default function AdminInvoicesPage() {
               /* SELECCIÓN DE PRODUCTO EXISTENTE DEL CATÁLOGO */
               <div className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-bold">Seleccionar Producto del Catálogo *</label>
+                  <label className="block text-zinc-400 mb-1 font-bold">Seleccionar Producto del Catálogo (A-Z) *</label>
                   <select
                     value={selectedProductId}
                     onChange={(e) => handleSelectExistingProduct(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white"
+                    className="w-full px-3 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500 cursor-pointer"
                   >
                     <option value="">-- Elige un producto --</option>
-                    {products.map((p) => (
+                    {sortedProducts.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} (Stock Actual: {p.stock} un. | Costo: {formatMoney(p.cost_price || 0)})
                       </option>
