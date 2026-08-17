@@ -95,10 +95,45 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: 'pagos@copeteexpress.cl',
   });
 
+  const LOCAL_CACHE_KEY = 'copete_express_backup_v2';
+
+  // Guardar en localStorage de forma segura
+  const saveLocalBackup = (patch: Partial<{
+    products: Product[];
+    promotions: Promotion[];
+    sales: Sale[];
+    invoices: Invoice[];
+    expenses: Expense[];
+    whatsappNumber: string;
+    bankDetails: BankDetails;
+  }>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const existing = localStorage.getItem(LOCAL_CACHE_KEY);
+      const parsed = existing ? JSON.parse(existing) : {};
+      const updated = { ...parsed, ...patch };
+      localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Error saving local backup:', e);
+    }
+  };
+
+  // Cargar respaldo local
+  const getLocalBackup = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const existing = localStorage.getItem(LOCAL_CACHE_KEY);
+      return existing ? JSON.parse(existing) : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Guardado persistente automático de Productos
   const setProducts: React.Dispatch<React.SetStateAction<Product[]>> = (value) => {
     setProductsState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
+      saveLocalBackup({ products: next });
       fetch('/api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,6 +147,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setPromotions: React.Dispatch<React.SetStateAction<Promotion[]>> = (value) => {
     setPromotionsState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
+      saveLocalBackup({ promotions: next });
       fetch('/api/store', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,12 +157,48 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const setSales = setSalesState;
-  const setInvoices = setInvoicesState;
-  const setExpenses = setExpensesState;
+  const setSales: React.Dispatch<React.SetStateAction<Sale[]>> = (value) => {
+    setSalesState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      saveLocalBackup({ sales: next });
+      fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: next } }),
+      }).catch(console.error);
+      return next;
+    });
+  };
+
+  const setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>> = (value) => {
+    setInvoicesState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      saveLocalBackup({ invoices: next });
+      fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: next } }),
+      }).catch(console.error);
+      return next;
+    });
+  };
+
+  const setExpenses: React.Dispatch<React.SetStateAction<Expense[]>> = (value) => {
+    setExpensesState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      saveLocalBackup({ expenses: next });
+      fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: next } }),
+      }).catch(console.error);
+      return next;
+    });
+  };
 
   const setWhatsappNumber = (num: string) => {
     setWhatsappNumberState(num);
+    saveLocalBackup({ whatsappNumber: num });
     fetch('/api/store', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -136,6 +208,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setBankDetails = (details: BankDetails) => {
     setBankDetailsState(details);
+    saveLocalBackup({ bankDetails: details });
     fetch('/api/store', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,19 +216,95 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }).catch(console.error);
   };
 
-  // Cargar estado centralizado desde la API del Servidor (/api/store)
+  // Cargar estado centralizado desde la API del Servidor (/api/store) con Auto-Restauración (Auto-Healing)
   const fetchServerStore = async () => {
     try {
       const res = await fetch('/api/store', { cache: 'no-store' });
       if (res.ok) {
-        const data = await res.json();
-        if (data.products !== undefined) setProductsState(data.products);
-        if (data.promotions !== undefined) setPromotionsState(data.promotions);
-        if (data.sales !== undefined) setSalesState(data.sales);
-        if (data.invoices !== undefined) setInvoicesState(data.invoices);
-        if (data.expenses !== undefined) setExpensesState(data.expenses);
-        if (data.whatsappNumber) setWhatsappNumberState(data.whatsappNumber);
-        if (data.bankDetails) setBankDetailsState(data.bankDetails);
+        const serverData = await res.json();
+        const localBackup = getLocalBackup();
+
+        // 1. Productos: Si el servidor tiene datos, úsalos; si está vacío y local tiene, auto-restaurar al servidor
+        if (serverData.products && serverData.products.length > 0) {
+          setProductsState(serverData.products);
+          saveLocalBackup({ products: serverData.products });
+        } else if (localBackup?.products && localBackup.products.length > 0) {
+          setProductsState(localBackup.products);
+          fetch('/api/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'UPDATE_PRODUCTS', payload: localBackup.products }),
+          }).catch(console.error);
+        }
+
+        // 2. Promociones: Auto-recuperación si un nuevo deploy reinició el archivo del servidor
+        if (serverData.promotions && serverData.promotions.length > 0) {
+          setPromotionsState(serverData.promotions);
+          saveLocalBackup({ promotions: serverData.promotions });
+        } else if (localBackup?.promotions && localBackup.promotions.length > 0) {
+          setPromotionsState(localBackup.promotions);
+          fetch('/api/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: localBackup.promotions }),
+          }).catch(console.error);
+        } else if (serverData.promotions !== undefined) {
+          setPromotionsState(serverData.promotions);
+        }
+
+        // 3. Facturas
+        if (serverData.invoices && serverData.invoices.length > 0) {
+          setInvoicesState(serverData.invoices);
+          saveLocalBackup({ invoices: serverData.invoices });
+        } else if (localBackup?.invoices && localBackup.invoices.length > 0) {
+          setInvoicesState(localBackup.invoices);
+          fetch('/api/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: localBackup.invoices } }),
+          }).catch(console.error);
+        } else if (serverData.invoices !== undefined) {
+          setInvoicesState(serverData.invoices);
+        }
+
+        // 4. Ventas
+        if (serverData.sales && serverData.sales.length > 0) {
+          setSalesState(serverData.sales);
+          saveLocalBackup({ sales: serverData.sales });
+        } else if (localBackup?.sales && localBackup.sales.length > 0) {
+          setSalesState(localBackup.sales);
+          fetch('/api/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: localBackup.sales } }),
+          }).catch(console.error);
+        } else if (serverData.sales !== undefined) {
+          setSalesState(serverData.sales);
+        }
+
+        // 5. Gastos
+        if (serverData.expenses && serverData.expenses.length > 0) {
+          setExpensesState(serverData.expenses);
+          saveLocalBackup({ expenses: serverData.expenses });
+        } else if (localBackup?.expenses && localBackup.expenses.length > 0) {
+          setExpensesState(localBackup.expenses);
+          fetch('/api/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: localBackup.expenses } }),
+          }).catch(console.error);
+        } else if (serverData.expenses !== undefined) {
+          setExpensesState(serverData.expenses);
+        }
+
+        if (serverData.whatsappNumber) {
+          setWhatsappNumberState(serverData.whatsappNumber);
+          saveLocalBackup({ whatsappNumber: serverData.whatsappNumber });
+        }
+        if (serverData.bankDetails) {
+          setBankDetailsState(serverData.bankDetails);
+          saveLocalBackup({ bankDetails: serverData.bankDetails });
+        }
       }
     } catch (e) {
       console.error('Error sincronizando estado con el servidor:', e);
@@ -163,10 +312,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Cargar del servidor al iniciar
+    // 1. Carga inmediata desde el respaldo local para velocidad y persistencia garantizada
+    const local = getLocalBackup();
+    if (local) {
+      if (local.products && local.products.length > 0) setProductsState(local.products);
+      if (local.promotions && local.promotions.length > 0) setPromotionsState(local.promotions);
+      if (local.invoices && local.invoices.length > 0) setInvoicesState(local.invoices);
+      if (local.sales && local.sales.length > 0) setSalesState(local.sales);
+      if (local.expenses && local.expenses.length > 0) setExpensesState(local.expenses);
+      if (local.whatsappNumber) setWhatsappNumberState(local.whatsappNumber);
+      if (local.bankDetails) setBankDetailsState(local.bankDetails);
+    }
+
+    // 2. Cargar y auto-sincronizar con el servidor
     fetchServerStore();
 
-    // Polling ligero de 8 segundos para mantener dispositivos sincronizados
+    // 3. Polling de sincronización periódica
     const interval = setInterval(fetchServerStore, 8000);
     return () => clearInterval(interval);
   }, []);
