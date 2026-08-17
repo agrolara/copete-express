@@ -26,10 +26,10 @@ export const metadata: Metadata = {
     siteName: 'Copete Express',
     images: [
       {
-        url: '/og-image.jpg',
+        url: '/api/og',
         width: 1200,
         height: 630,
-        alt: 'Copete Express 24/7 - Tu Botillería Digital',
+        alt: 'Copete Express 24/7 - El Producto Más Vendido',
       },
     ],
     locale: 'es_CL',
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     title: 'Copete Express 24/7 | Tu Previa Organizada en Minutos 🚀',
     description:
       'Licores fríos, packs piscoleros, destilados y hielo entregados directo en tu puerta en minutos.',
-    images: ['/og-image.jpg'],
+    images: ['/api/og'],
   },
 };
 
