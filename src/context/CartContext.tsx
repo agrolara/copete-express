@@ -224,10 +224,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const serverData = await res.json();
         const localBackup = getLocalBackup();
 
-        // 1. Productos: Si el servidor tiene datos, úsalos; si está vacío y local tiene, auto-restaurar al servidor
+        // 1. Productos: Smart-merge para PRESERVAR permanentemente imágenes personalizadas agregadas por el usuario
         if (serverData.products && serverData.products.length > 0) {
-          setProductsState(serverData.products);
-          saveLocalBackup({ products: serverData.products });
+          const localProds = localBackup?.products || [];
+          let needsServerSync = false;
+
+          const mergedProducts = serverData.products.map((sp: Product) => {
+            const lp = localProds.find((p: Product) => p.id === sp.id);
+            if (lp) {
+              const isServerFallback = sp.image_url.includes('images.unsplash.com/photo-1527281400683');
+              const hasCustomLocalImg =
+                lp.image_url && !lp.image_url.includes('images.unsplash.com/photo-1527281400683');
+
+              if (hasCustomLocalImg && (isServerFallback || lp.image_url !== sp.image_url)) {
+                needsServerSync = true;
+                return { ...sp, image_url: lp.image_url };
+              }
+            }
+            return sp;
+          });
+
+          setProductsState(mergedProducts);
+          saveLocalBackup({ products: mergedProducts });
+
+          if (needsServerSync) {
+            fetch('/api/store', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'UPDATE_PRODUCTS', payload: mergedProducts }),
+            }).catch(console.error);
+          }
         } else if (localBackup?.products && localBackup.products.length > 0) {
           setProductsState(localBackup.products);
           fetch('/api/store', {
