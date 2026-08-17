@@ -4,8 +4,44 @@ import { CartProvider } from '@/context/CartContext';
 import { CartDrawer } from '@/components/shop/CartDrawer';
 
 export const metadata: Metadata = {
-  title: 'Copete Express | Tu Botillería Digital 24/7',
-  description: 'Venta y despacho Express de piscos, cervezas, destilados, vinos y packs de promociones en 30 minutos.',
+  metadataBase: new URL('https://copeteexpress.agrolara.dedyn.io'),
+  title: 'Copete Express 24/7 | Tu Previa Organizada en Minutos',
+  description:
+    'Licores fríos, packs piscoleros, cervezas, destilados y hielo entregados directo en tu puerta. Pide fácil y paga al recibir o por transferencia.',
+  keywords: [
+    'botilleria delivery',
+    'copete express',
+    'delivery de copete',
+    'piscolas',
+    'cervezas heladas',
+    'pisco mistral',
+    'whisky delivery',
+    'packs promociones previa',
+  ],
+  openGraph: {
+    title: 'Copete Express 24/7 | Tu Previa Organizada en Minutos 🚀',
+    description:
+      'Licores fríos, packs piscoleros, cervezas, destilados y hielo entregados directo en tu puerta en minutos. ¡Haz tu pedido online!',
+    url: 'https://copeteexpress.agrolara.dedyn.io',
+    siteName: 'Copete Express',
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'Copete Express 24/7 - Tu Botillería Digital',
+      },
+    ],
+    locale: 'es_CL',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Copete Express 24/7 | Tu Previa Organizada en Minutos 🚀',
+    description:
+      'Licores fríos, packs piscoleros, destilados y hielo entregados directo en tu puerta en minutos.',
+    images: ['/og-image.jpg'],
+  },
 };
 
 export default function RootLayout({
