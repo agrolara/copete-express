@@ -98,7 +98,6 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
           src={currentSrc}
           alt={alt}
           referrerPolicy="no-referrer"
-          crossOrigin="anonymous"
           className={`w-full h-full transition-all duration-500 group-hover:scale-105 ${
             objectFit === 'contain' ? 'object-contain p-3' : 'object-cover'
           } ${loading ? 'scale-105 blur-sm opacity-70' : 'scale-100 blur-0 opacity-100'}`}
