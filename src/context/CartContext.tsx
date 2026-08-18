@@ -95,7 +95,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: 'pagos@copeteexpress.cl',
   });
 
-  const LOCAL_CACHE_KEY = 'copete_express_backup_v2';
+  const LOCAL_CACHE_KEY = 'copete_express_backup_v3';
 
   // Guardar en localStorage de forma segura
   const saveLocalBackup = (patch: Partial<{
@@ -219,7 +219,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Cargar estado centralizado desde la API del Servidor (/api/store) con Auto-Restauración (Auto-Healing)
   const fetchServerStore = async () => {
     try {
-      const res = await fetch('/api/store', { cache: 'no-store' });
+      const res = await fetch(`/api/store?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+      });
       if (res.ok) {
         const serverData = await res.json();
         const localBackup = getLocalBackup();

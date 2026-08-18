@@ -50,25 +50,26 @@ const defaultStore: AppStoreData = {
 let memoryStore: AppStoreData | null = null;
 
 export function getStore(): AppStoreData {
-  if (memoryStore) return memoryStore;
-
   try {
     if (fs.existsSync(STORE_FILE)) {
       const data = fs.readFileSync(STORE_FILE, 'utf-8');
-      memoryStore = JSON.parse(data);
-      if (!memoryStore!.products) memoryStore!.products = [];
-      if (!memoryStore!.promotions) memoryStore!.promotions = [];
-      if (!memoryStore!.sales) memoryStore!.sales = [];
-      if (!memoryStore!.invoices) memoryStore!.invoices = [];
-      if (!memoryStore!.expenses) memoryStore!.expenses = [];
-      return memoryStore!;
+      const parsed: AppStoreData = JSON.parse(data);
+      if (!parsed.products) parsed.products = [];
+      if (!parsed.promotions) parsed.promotions = [];
+      if (!parsed.sales) parsed.sales = [];
+      if (!parsed.invoices) parsed.invoices = [];
+      if (!parsed.expenses) parsed.expenses = [];
+      memoryStore = parsed;
+      return parsed;
     }
   } catch (e) {
     console.error('Error reading server store file:', e);
   }
 
-  memoryStore = { ...defaultStore };
-  saveStore(memoryStore);
+  if (!memoryStore) {
+    memoryStore = { ...defaultStore };
+    saveStore(memoryStore);
+  }
   return memoryStore;
 }
 
