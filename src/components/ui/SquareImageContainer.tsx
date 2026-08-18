@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import Image from 'next/image';
+import React, { useState, useEffect } from 'react';
 import { Wine, Flame, Sparkles } from 'lucide-react';
-import { formatImageUrl } from '@/lib/imageUtils';
+import { formatImageUrl, getImageFallbacks } from '@/lib/imageUtils';
 
 interface SquareImageContainerProps {
   src: string;
@@ -22,9 +21,41 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
   badgeType = 'category',
   className = '',
 }) => {
-  const [imageError, setImageError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState<string>('');
+  const [fallbackIndex, setFallbackIndex] = useState<number>(0);
+  const [hasError, setHasError] = useState(false);
   const [loading, setLoading] = useState(true);
-  const formattedSrc = formatImageUrl(src);
+
+  const fallbacks = React.useMemo(() => {
+    const formatted = formatImageUrl(src);
+    const extra = getImageFallbacks(src);
+    const list = [formatted, ...extra].filter((u): u is string => Boolean(u));
+    // Eliminar duplicados
+    return Array.from(new Set(list));
+  }, [src]);
+
+  useEffect(() => {
+    if (fallbacks.length > 0) {
+      setCurrentSrc(fallbacks[0]);
+      setFallbackIndex(0);
+      setHasError(false);
+      setLoading(true);
+    } else {
+      setHasError(true);
+      setLoading(false);
+    }
+  }, [fallbacks]);
+
+  const handleError = () => {
+    if (fallbackIndex + 1 < fallbacks.length) {
+      const nextIdx = fallbackIndex + 1;
+      setFallbackIndex(nextIdx);
+      setCurrentSrc(fallbacks[nextIdx]);
+    } else {
+      setHasError(true);
+      setLoading(false);
+    }
+  };
 
   const getBadgeStyle = () => {
     switch (badgeType) {
@@ -60,19 +91,19 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
       {/* Brillo de fondo estético neón */}
       <div className="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity duration-300 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-600/30 via-transparent to-transparent pointer-events-none" />
 
-      {/* Renderizado de la imagen */}
-      {!imageError && formattedSrc ? (
-        <Image
-          src={formattedSrc}
+      {/* Renderizado de la imagen con soporte nativo de referrerPolicy no-referrer */}
+      {!hasError && currentSrc ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={currentSrc}
           alt={alt}
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className={`transition-all duration-500 group-hover:scale-105 ${
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          className={`w-full h-full transition-all duration-500 group-hover:scale-105 ${
             objectFit === 'contain' ? 'object-contain p-3' : 'object-cover'
-          } ${loading ? 'scale-105 blur-sm grayscale' : 'scale-100 blur-0 grayscale-0'}`}
+          } ${loading ? 'scale-105 blur-sm opacity-70' : 'scale-100 blur-0 opacity-100'}`}
           onLoad={() => setLoading(false)}
-          onError={() => setImageError(true)}
-          unoptimized
+          onError={handleError}
         />
       ) : (
         /* Fallback elegante en caso de error de imagen o URL vacía */

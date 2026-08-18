@@ -224,36 +224,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const serverData = await res.json();
         const localBackup = getLocalBackup();
 
-        // 1. Productos: Smart-merge para PRESERVAR permanentemente imágenes personalizadas agregadas por el usuario
+        // 1. Productos: Sincronización multi-dispositivo con el Servidor (y auto-restauración si el server está vacío)
         if (serverData.products && serverData.products.length > 0) {
-          const localProds = localBackup?.products || [];
-          let needsServerSync = false;
-
-          const mergedProducts = serverData.products.map((sp: Product) => {
-            const lp = localProds.find((p: Product) => p.id === sp.id);
-            if (lp) {
-              const isServerFallback = sp.image_url.includes('images.unsplash.com/photo-1527281400683');
-              const hasCustomLocalImg =
-                lp.image_url && !lp.image_url.includes('images.unsplash.com/photo-1527281400683');
-
-              if (hasCustomLocalImg && (isServerFallback || lp.image_url !== sp.image_url)) {
-                needsServerSync = true;
-                return { ...sp, image_url: lp.image_url };
-              }
-            }
-            return sp;
-          });
-
-          setProductsState(mergedProducts);
-          saveLocalBackup({ products: mergedProducts });
-
-          if (needsServerSync) {
-            fetch('/api/store', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'UPDATE_PRODUCTS', payload: mergedProducts }),
-            }).catch(console.error);
-          }
+          setProductsState(serverData.products);
+          saveLocalBackup({ products: serverData.products });
         } else if (localBackup?.products && localBackup.products.length > 0) {
           setProductsState(localBackup.products);
           fetch('/api/store', {
@@ -263,88 +237,64 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }).catch(console.error);
         }
 
-        // 2. Promociones: Smart-merge por ID único
-        const serverPromos = serverData.promotions || [];
-        const localPromos = localBackup?.promotions || [];
-        const promosMap = new Map<string, Promotion>();
-        serverPromos.forEach((p: Promotion) => promosMap.set(p.id, p));
-        localPromos.forEach((p: Promotion) => promosMap.set(p.id, p));
-        const mergedPromos = Array.from(promosMap.values());
-
-        setPromotionsState(mergedPromos);
-        saveLocalBackup({ promotions: mergedPromos });
-
-        if (mergedPromos.length > serverPromos.length) {
+        // 2. Promociones: Sincronización multi-dispositivo
+        if (serverData.promotions && serverData.promotions.length > 0) {
+          setPromotionsState(serverData.promotions);
+          saveLocalBackup({ promotions: serverData.promotions });
+        } else if (localBackup?.promotions && localBackup.promotions.length > 0) {
+          setPromotionsState(localBackup.promotions);
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: mergedPromos }),
+            body: JSON.stringify({ action: 'UPDATE_PROMOTIONS', payload: localBackup.promotions }),
           }).catch(console.error);
+        } else if (serverData.promotions !== undefined) {
+          setPromotionsState(serverData.promotions);
         }
 
-        // 3. Facturas: Smart-merge por ID único
-        const serverInvoices = serverData.invoices || [];
-        const localInvoices = localBackup?.invoices || [];
-        const invoicesMap = new Map<string, Invoice>();
-        serverInvoices.forEach((i: Invoice) => invoicesMap.set(i.id, i));
-        localInvoices.forEach((i: Invoice) => invoicesMap.set(i.id, i));
-        const mergedInvoices = Array.from(invoicesMap.values()).sort(
-          (a, b) =>
-            new Date(b.created_at || b.invoice_date).getTime() -
-            new Date(a.created_at || a.invoice_date).getTime()
-        );
-
-        setInvoicesState(mergedInvoices);
-        saveLocalBackup({ invoices: mergedInvoices });
-
-        if (mergedInvoices.length > serverInvoices.length) {
+        // 3. Facturas: Sincronización multi-dispositivo
+        if (serverData.invoices && serverData.invoices.length > 0) {
+          setInvoicesState(serverData.invoices);
+          saveLocalBackup({ invoices: serverData.invoices });
+        } else if (localBackup?.invoices && localBackup.invoices.length > 0) {
+          setInvoicesState(localBackup.invoices);
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: mergedInvoices } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { invoices: localBackup.invoices } }),
           }).catch(console.error);
+        } else if (serverData.invoices !== undefined) {
+          setInvoicesState(serverData.invoices);
         }
 
-        // 4. Ventas: Smart-merge por ID único (NUNCA se borran ventas en nuevos despliegues)
-        const serverSales = serverData.sales || [];
-        const localSales = localBackup?.sales || [];
-        const salesMap = new Map<string, Sale>();
-        serverSales.forEach((s: Sale) => salesMap.set(s.id, s));
-        localSales.forEach((s: Sale) => salesMap.set(s.id, s));
-        const mergedSales = Array.from(salesMap.values()).sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-
-        setSalesState(mergedSales);
-        saveLocalBackup({ sales: mergedSales });
-
-        if (mergedSales.length > serverSales.length) {
+        // 4. Ventas: Sincronización multi-dispositivo
+        if (serverData.sales && serverData.sales.length > 0) {
+          setSalesState(serverData.sales);
+          saveLocalBackup({ sales: serverData.sales });
+        } else if (localBackup?.sales && localBackup.sales.length > 0) {
+          setSalesState(localBackup.sales);
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: mergedSales } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { sales: localBackup.sales } }),
           }).catch(console.error);
+        } else if (serverData.sales !== undefined) {
+          setSalesState(serverData.sales);
         }
 
-        // 5. Gastos Operacionales: Smart-merge por ID único
-        const serverExpenses = serverData.expenses || [];
-        const localExpenses = localBackup?.expenses || [];
-        const expensesMap = new Map<string, Expense>();
-        serverExpenses.forEach((e: Expense) => expensesMap.set(e.id, e));
-        localExpenses.forEach((e: Expense) => expensesMap.set(e.id, e));
-        const mergedExpenses = Array.from(expensesMap.values()).sort(
-          (a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime()
-        );
-
-        setExpensesState(mergedExpenses);
-        saveLocalBackup({ expenses: mergedExpenses });
-
-        if (mergedExpenses.length > serverExpenses.length) {
+        // 5. Gastos Operacionales: Sincronización multi-dispositivo
+        if (serverData.expenses && serverData.expenses.length > 0) {
+          setExpensesState(serverData.expenses);
+          saveLocalBackup({ expenses: serverData.expenses });
+        } else if (localBackup?.expenses && localBackup.expenses.length > 0) {
+          setExpensesState(localBackup.expenses);
           fetch('/api/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: mergedExpenses } }),
+            body: JSON.stringify({ action: 'SAVE_ALL', payload: { expenses: localBackup.expenses } }),
           }).catch(console.error);
+        } else if (serverData.expenses !== undefined) {
+          setExpensesState(serverData.expenses);
         }
 
         if (serverData.whatsappNumber) {

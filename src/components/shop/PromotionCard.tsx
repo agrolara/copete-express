@@ -40,6 +40,15 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({ promotion }) => {
     }
   };
 
+  // Determinar la imagen del Pack: si tiene personalizada se usa, si es el fallback de unsplash se toma la del primer producto del pack
+  const firstProductImg = promotion.items?.[0]?.product?.image_url;
+  const hasCustomImg =
+    promotion.image_url &&
+    !promotion.image_url.includes('images.unsplash.com/photo-1514362545857-3bc16c4c7d1b') &&
+    !promotion.image_url.includes('images.unsplash.com/photo-1527281400683-1aae777175f8');
+
+  const promoImage = hasCustomImg ? promotion.image_url : (firstProductImg || promotion.image_url);
+
   return (
     <div className="group relative bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-purple-950/20 border-2 border-orange-500/40 hover:border-orange-400 rounded-2xl p-3 flex flex-col justify-between transition-all duration-300 hover:shadow-neon-orange">
       {/* Badge de Oferta Exclusiva */}
@@ -51,7 +60,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({ promotion }) => {
 
       {/* Contenedor Cuadrado de Imagen (1:1) */}
       <SquareImageContainer
-        src={promotion.image_url}
+        src={promoImage}
         alt={promotion.name}
         objectFit="cover"
         badgeText={isOutOfStock ? 'Pack Agotado' : `Quedan ${maxPacksAvailable} Packs`}

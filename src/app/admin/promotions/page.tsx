@@ -134,7 +134,8 @@ export default function AdminPromotionsPage() {
       };
     });
 
-    const cleanedImageUrl = formatImageUrl(imageUrl);
+    const defaultItemImg = formattedItems[0]?.product?.image_url || '';
+    const cleanedImageUrl = imageUrl.trim() ? formatImageUrl(imageUrl) : defaultItemImg;
 
     if (editingPromo) {
       setPromotions((prev) =>
@@ -530,6 +531,13 @@ export default function AdminPromotionsPage() {
                 maxPacks = Math.min(...packs);
               }
 
+              const firstProdImg = promo.items?.[0]?.product?.image_url;
+              const hasCustom =
+                promo.image_url &&
+                !promo.image_url.includes('images.unsplash.com/photo-1514362545857-3bc16c4c7d1b') &&
+                !promo.image_url.includes('images.unsplash.com/photo-1527281400683-1aae777175f8');
+              const displayImg = hasCustom ? promo.image_url : (firstProdImg || promo.image_url);
+
               return (
                 <div
                   key={promo.id}
@@ -537,7 +545,7 @@ export default function AdminPromotionsPage() {
                 >
                   {/* Imagen cuadrada 1:1 */}
                   <SquareImageContainer
-                    src={promo.image_url}
+                    src={displayImg}
                     alt={promo.name}
                     objectFit="cover"
                     badgeText={maxPacks === 0 ? 'PACK AGOTADO' : `${maxPacks} Packs Armables`}
