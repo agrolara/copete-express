@@ -66,10 +66,21 @@ export function getStore(): AppStoreData {
     console.error('Error reading server store file:', e);
   }
 
-  if (!memoryStore) {
-    memoryStore = { ...defaultStore };
-    saveStore(memoryStore);
+  // Si STORE_FILE no existe aún en el volumen persistente montado, inicializarlo con el catálogo base
+  try {
+    const fallbackFile = path.join(process.cwd(), 'data', 'copete_express_store.json');
+    if (fs.existsSync(fallbackFile) && fallbackFile !== STORE_FILE) {
+      const initData = fs.readFileSync(fallbackFile, 'utf-8');
+      const parsed: AppStoreData = JSON.parse(initData);
+      saveStore(parsed);
+      return parsed;
+    }
+  } catch (e) {
+    console.error('Error seeding store into persistent volume:', e);
   }
+
+  memoryStore = { ...defaultStore };
+  saveStore(memoryStore);
   return memoryStore;
 }
 
