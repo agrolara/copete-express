@@ -8,6 +8,7 @@ import {
   INITIAL_SALES,
   INITIAL_INVOICES,
   INITIAL_EXPENSES,
+  supabase,
 } from '@/lib/supabase';
 
 export interface BankDetails {
@@ -327,12 +328,50 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (local.bankDetails) setBankDetailsState(local.bankDetails);
     }
 
-    // 2. Cargar y auto-sincronizar con el servidor
+    // 2. Cargar y auto-sincronizar con el servidor y Supabase
     fetchServerStore();
 
-    // 3. Polling de sincronización periódica
+    // 3. Suscripción en Tiempo Real con Supabase Realtime
+    const channel = supabase
+      .channel('copete_store_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'copete_store' },
+        (payload) => {
+          if (payload.new && (payload.new as { data?: { products?: Product[]; promotions?: Promotion[]; sales?: Sale[]; invoices?: Invoice[]; expenses?: Expense[] } }).data) {
+            const fresh = (payload.new as { data: { products?: Product[]; promotions?: Promotion[]; sales?: Sale[]; invoices?: Invoice[]; expenses?: Expense[] } }).data;
+            if (fresh.products && fresh.products.length > 0) {
+              setProductsState(fresh.products);
+              saveLocalBackup({ products: fresh.products });
+            }
+            if (fresh.promotions) {
+              setPromotionsState(fresh.promotions);
+              saveLocalBackup({ promotions: fresh.promotions });
+            }
+            if (fresh.sales) {
+              setSalesState(fresh.sales);
+              saveLocalBackup({ sales: fresh.sales });
+            }
+            if (fresh.invoices) {
+              setInvoicesState(fresh.invoices);
+              saveLocalBackup({ invoices: fresh.invoices });
+            }
+            if (fresh.expenses) {
+              setExpensesState(fresh.expenses);
+              saveLocalBackup({ expenses: fresh.expenses });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 4. Polling periódico de seguridad cada 8 segundos
     const interval = setInterval(fetchServerStore, 8000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Eliminar venta y opcionalmente restaurar el stock al catálogo

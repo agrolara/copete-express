@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getStore, saveStore } from '@/lib/serverStore';
+import { getStoreAsync, saveStoreAsync } from '@/lib/serverStore';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
-  const store = getStore();
+  const store = await getStoreAsync();
   return NextResponse.json(store, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0',
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action, payload } = body;
-    const store = getStore();
+    const store = await getStoreAsync();
 
     if (action === 'SAVE_ALL') {
       if (payload.products !== undefined) store.products = payload.products;
@@ -30,19 +30,19 @@ export async function POST(req: Request) {
       if (payload.expenses !== undefined) store.expenses = payload.expenses;
       if (payload.whatsappNumber) store.whatsappNumber = payload.whatsappNumber;
       if (payload.bankDetails) store.bankDetails = payload.bankDetails;
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     if (action === 'UPDATE_PRODUCTS') {
       store.products = payload;
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     if (action === 'UPDATE_PROMOTIONS') {
       store.promotions = payload;
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       if (updatedProducts) {
         store.products = updatedProducts;
       }
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       if (updatedProducts) {
         store.products = updatedProducts;
       }
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       if (updatedProducts) {
         store.products = updatedProducts;
       }
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       if (updatedProducts) {
         store.products = updatedProducts;
       }
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -92,28 +92,28 @@ export async function POST(req: Request) {
       if (updatedProducts) {
         store.products = updatedProducts;
       }
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     if (action === 'ADD_EXPENSE') {
       const { expense } = payload;
       store.expenses = [expense, ...(store.expenses || [])];
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     if (action === 'DELETE_EXPENSE') {
       const { expenseId } = payload;
       store.expenses = (store.expenses || []).filter((e) => e.id !== expenseId);
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     if (action === 'UPDATE_SETTINGS') {
       if (payload.whatsappNumber) store.whatsappNumber = payload.whatsappNumber;
       if (payload.bankDetails) store.bankDetails = payload.bankDetails;
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
@@ -123,12 +123,13 @@ export async function POST(req: Request) {
       store.sales = [];
       store.invoices = [];
       store.expenses = [];
-      saveStore(store);
+      await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }
 
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error) {
+    console.error('Error procesando api/store:', error);
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }

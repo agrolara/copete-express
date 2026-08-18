@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 import { Product, Promotion, Sale, Invoice, Expense } from '@/types';
 import {
   INITIAL_PRODUCTS,
@@ -25,6 +26,11 @@ export interface AppStoreData {
     email: string;
   };
 }
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.agrolara.dedyn.io';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4MDk4MDE4MCwiZXhwIjo0OTM2NjUzNzgwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.jU61l2XNxwvk_955XHpXC5YV7nWHxcODH-c-AzPYN5w';
+
+export const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 // Almacén persistente en carpeta data/ fuera de .next para preservar datos entre compilaciones y reinicios
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
@@ -94,5 +100,32 @@ export function saveStore(store: AppStoreData) {
     fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving server store file:', e);
+  }
+}
+
+export async function getStoreAsync(): Promise<AppStoreData> {
+  try {
+    const { data, error } = await supabaseAdmin.from('copete_store').select('data').eq('id', 'main').single();
+    if (!error && data?.data) {
+      const store = data.data as AppStoreData;
+      saveStore(store);
+      return store;
+    }
+  } catch (e) {
+    console.error('Error fetching store from Supabase:', e);
+  }
+  return getStore();
+}
+
+export async function saveStoreAsync(store: AppStoreData): Promise<void> {
+  saveStore(store);
+  try {
+    await supabaseAdmin.from('copete_store').upsert({
+      id: 'main',
+      data: store,
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('Error saving store to Supabase:', e);
   }
 }
