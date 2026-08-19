@@ -8,6 +8,7 @@ interface SquareImageContainerProps {
   src: string;
   alt: string;
   objectFit?: 'cover' | 'contain';
+  aspectRatio?: 'vertical' | 'square' | '4/5' | '3/4' | '1/1';
   badgeText?: string;
   badgeType?: 'promo' | 'warning' | 'outOfStock' | 'category';
   className?: string;
@@ -17,6 +18,7 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
   src,
   alt,
   objectFit = 'cover',
+  aspectRatio = 'vertical',
   badgeText,
   badgeType = 'category',
   className = '',
@@ -71,9 +73,23 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
     }
   };
 
+  const getAspectClass = () => {
+    switch (aspectRatio) {
+      case 'square':
+      case '1/1':
+        return 'aspect-square';
+      case '4/5':
+        return 'aspect-[4/5]';
+      case 'vertical':
+      case '3/4':
+      default:
+        return 'aspect-[3/4]';
+    }
+  };
+
   return (
     <div
-      className={`relative w-full aspect-square overflow-hidden rounded-2xl bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 group ${className}`}
+      className={`relative w-full ${getAspectClass()} overflow-hidden rounded-2xl bg-gradient-to-b from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 group ${className}`}
     >
       {/* Badge flotante en la esquina superior izquierda */}
       {badgeText && (
@@ -99,7 +115,7 @@ export const SquareImageContainer: React.FC<SquareImageContainerProps> = ({
           alt={alt}
           referrerPolicy="no-referrer"
           className={`w-full h-full transition-all duration-500 group-hover:scale-105 ${
-            objectFit === 'contain' ? 'object-contain p-3' : 'object-cover'
+            objectFit === 'contain' ? 'object-contain p-2' : 'object-cover'
           } ${loading ? 'scale-105 blur-sm opacity-70' : 'scale-100 blur-0 opacity-100'}`}
           onLoad={() => setLoading(false)}
           onError={handleError}
