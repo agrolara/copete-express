@@ -70,6 +70,10 @@ export interface Sale {
   customer_phone: string;
   delivery_address: string;
   payment_method?: 'transferencia' | 'efectivo';
+  subtotal_amount?: number;
+  discount_type?: 'none' | 'percentage' | 'fixed';
+  discount_value?: number;
+  discount_amount?: number;
   total_amount: number;
   status: 'pending' | 'completed' | 'cancelled';
   created_at: string;

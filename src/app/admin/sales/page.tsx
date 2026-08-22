@@ -225,8 +225,15 @@ export default function AdminSalesPage() {
                     <td className="p-4 font-bold text-white">{sale.customer_name}</td>
                     <td className="p-4 text-zinc-400">{sale.customer_phone}</td>
                     <td className="p-4 text-zinc-400 max-w-xs truncate">{sale.delivery_address}</td>
-                    <td className="p-4 font-extrabold text-white">
-                      ${sale.total_amount.toLocaleString('es-CL')}
+                    <td className="p-4">
+                      <div className="font-extrabold text-white">
+                        ${sale.total_amount.toLocaleString('es-CL')}
+                      </div>
+                      {sale.discount_amount && sale.discount_amount > 0 ? (
+                        <span className="inline-block text-[10px] text-amber-400 font-bold bg-amber-950/50 px-1.5 py-0.5 rounded-md border border-amber-500/30">
+                          Dto: -${sale.discount_amount.toLocaleString('es-CL')} {sale.discount_type === 'percentage' ? `(${sale.discount_value}%)` : ''}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="p-4">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
@@ -323,11 +330,26 @@ export default function AdminSalesPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-zinc-800 flex justify-between items-center text-sm">
-                <span className="font-bold text-white">Total Venta:</span>
-                <span className="text-lg font-black text-purple-400">
-                  ${selectedSale.total_amount.toLocaleString('es-CL')}
-                </span>
+              {/* Desglose Subtotal, Descuento y Total */}
+              <div className="pt-3 border-t border-zinc-800 space-y-1.5 text-xs">
+                {selectedSale.subtotal_amount && selectedSale.subtotal_amount !== selectedSale.total_amount && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Subtotal ítems:</span>
+                    <span className="font-mono font-bold text-white">${selectedSale.subtotal_amount.toLocaleString('es-CL')}</span>
+                  </div>
+                )}
+                {selectedSale.discount_amount && selectedSale.discount_amount > 0 && (
+                  <div className="flex justify-between text-amber-400 font-semibold">
+                    <span>Descuento aplicado {selectedSale.discount_type === 'percentage' ? `(${selectedSale.discount_value}%)` : ''}:</span>
+                    <span className="font-mono font-bold">-${selectedSale.discount_amount.toLocaleString('es-CL')}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-sm pt-1 border-t border-zinc-800">
+                  <span className="font-bold text-white">Total Cobrado:</span>
+                  <span className="text-lg font-black text-emerald-400 font-mono">
+                    ${selectedSale.total_amount.toLocaleString('es-CL')}
+                  </span>
+                </div>
               </div>
 
               <div className="pt-2">

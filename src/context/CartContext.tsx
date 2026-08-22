@@ -70,7 +70,8 @@ interface CartContextType {
     customerPhone: string,
     deliveryAddress: string,
     paymentMethod: PaymentMethod,
-    orderItems: { id: string; type: 'product' | 'promotion'; quantity: number }[]
+    orderItems: { id: string; type: 'product' | 'promotion'; quantity: number }[],
+    discount?: { type: 'none' | 'percentage' | 'fixed'; value: number }
   ) => Promise<{ success: boolean; message: string; summaryText: string }>;
 }
 
@@ -864,16 +865,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, message: 'Pedido registrado con éxito.' };
   };
 
-  // Crear Pedido Manual por Administrador (WhatsApp)
+  // Crear Pedido Manual por Administrador (WhatsApp) con Soporte de Descuento (% o Monto Fijo)
   const createAdminOrder = async (
     customerName: string,
     customerPhone: string,
     deliveryAddress: string,
     paymentMethod: PaymentMethod,
-    orderItems: { id: string; type: 'product' | 'promotion'; quantity: number }[]
+    orderItems: { id: string; type: 'product' | 'promotion'; quantity: number }[],
+    discount?: { type: 'none' | 'percentage' | 'fixed'; value: number }
   ): Promise<{ success: boolean; message: string; summaryText: string }> => {
     const updatedProducts = [...products];
-    let calculatedTotal = 0;
+    let subtotalAmount = 0;
     const saleItemsList: SaleItem[] = [];
     const summaryLines: string[] = [
       `🛒 *PEDIDO COPETE EXPRESS* 🛒`,
@@ -898,8 +900,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const pIdx = updatedProducts.findIndex((p) => p.id === item.id);
         updatedProducts[pIdx].stock -= item.quantity;
-        const subtotal = prod.price * item.quantity;
-        calculatedTotal += subtotal;
+        const itemSubtotal = prod.price * item.quantity;
+        subtotalAmount += itemSubtotal;
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
@@ -909,7 +911,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cost_price: prod.cost_price || Math.round(prod.price * 0.6),
           item_name: prod.name,
         });
-        summaryLines.push(`• ${item.quantity}x ${prod.name} - $${subtotal.toLocaleString('es-CL')}`);
+        summaryLines.push(`• ${item.quantity}x ${prod.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
       } else {
         const promo = promotions.find((p) => p.id === item.id);
         if (promo && promo.items) {
@@ -925,8 +927,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             updatedProducts[pIdx].stock -= needed;
           }
-          const subtotal = promo.promo_price * item.quantity;
-          calculatedTotal += subtotal;
+          const itemSubtotal = promo.promo_price * item.quantity;
+          subtotalAmount += itemSubtotal;
           saleItemsList.push({
             id: crypto.randomUUID(),
             sale_id: '',
@@ -936,12 +938,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             cost_price: Math.round(promo.promo_price * 0.6),
             item_name: promo.name,
           });
-          summaryLines.push(`• ${item.quantity}x ${promo.name} - $${subtotal.toLocaleString('es-CL')}`);
+          summaryLines.push(`• ${item.quantity}x ${promo.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
         }
       }
     }
 
-    summaryLines.push(`\n💰 *TOTAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
+    // Cálculo del Descuento
+    let discountAmount = 0;
+    const discountType = discount?.type || 'none';
+    const discountValue = discount?.value || 0;
+
+    if (discountType === 'percentage' && discountValue > 0) {
+      discountAmount = Math.round(subtotalAmount * (Math.min(100, discountValue) / 100));
+    } else if (discountType === 'fixed' && discountValue > 0) {
+      discountAmount = Math.min(subtotalAmount, Math.round(discountValue));
+    }
+
+    const calculatedTotal = Math.max(0, subtotalAmount - discountAmount);
+
+    summaryLines.push(`━━━━━━━━━━━━━━━━━━━━`);
+    if (discountAmount > 0) {
+      summaryLines.push(`💵 *Subtotal:* $${subtotalAmount.toLocaleString('es-CL')}`);
+      if (discountType === 'percentage') {
+        summaryLines.push(`🏷️ *Descuento (${discountValue}%):* -$${discountAmount.toLocaleString('es-CL')}`);
+      } else {
+        summaryLines.push(`🏷️ *Descuento Especial:* -$${discountAmount.toLocaleString('es-CL')}`);
+      }
+      summaryLines.push(`💰 *TOTAL FINAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
+    } else {
+      summaryLines.push(`💰 *TOTAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
+    }
 
     if (paymentMethod === 'transferencia') {
       summaryLines.push(`\n🏦 *DATOS DE TRANSFERENCIA:*`);
@@ -963,6 +989,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       customer_phone: customerPhone,
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
+      subtotal_amount: subtotalAmount,
+      discount_type: discountType,
+      discount_value: discountValue,
+      discount_amount: discountAmount,
       total_amount: calculatedTotal,
       status: 'completed',
       created_at: new Date().toISOString(),
