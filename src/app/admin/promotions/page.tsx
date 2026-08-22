@@ -6,6 +6,7 @@ import { Promotion, PromotionItem } from '@/types';
 import { SquareImageContainer } from '@/components/ui/SquareImageContainer';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { formatImageUrl } from '@/lib/imageUtils';
+import { supabase, STORAGE_BUCKET } from '@/lib/supabase';
 import {
   Sparkles,
   Plus,
@@ -22,6 +23,8 @@ import {
   Check,
   AlertCircle,
   ArrowRight,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 
 export default function AdminPromotionsPage() {
@@ -41,6 +44,34 @@ export default function AdminPromotionsPage() {
   // Crop Modal State
   const [isCropOpen, setIsCropOpen] = useState(false);
   const [cropTargetUrl, setCropTargetUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `promo_${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${fileExt}`;
+      const filePath = `promotions/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
+      if (data?.publicUrl) {
+        setImageUrl(data.publicUrl);
+      }
+    } catch (err: unknown) {
+      alert('Error al subir la imagen: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // Productos ordenados ALFABÉTICAMENTE A-Z para todas las listas desplegables
   const sortedProducts = useMemo(() => {
@@ -310,9 +341,31 @@ export default function AdminPromotionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-300 mb-1.5">
-                  URL de Imagen del Pack (Google Drive / Web)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-300">
+                    Foto del Pack (Subir o Enlace)
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] font-bold text-orange-400 hover:text-orange-300 cursor-pointer">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Subiendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>📁 Subir desde Dispositivo</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -320,7 +373,7 @@ export default function AdminPromotionsPage() {
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     className="flex-1 px-4 py-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 font-mono focus:outline-none focus:border-orange-500"
-                    placeholder="https://drive.google.com/... o https://images..."
+                    placeholder="https://... o sube una foto con el botón de arriba"
                   />
                   <button
                     type="button"
@@ -330,9 +383,10 @@ export default function AdminPromotionsPage() {
                       setIsCropOpen(true);
                     }}
                     className="flex items-center gap-1.5 px-4 py-3 rounded-2xl bg-orange-600/30 text-orange-300 border border-orange-500/40 text-xs font-bold hover:bg-orange-600/50 transition-colors shrink-0"
+                    title="Recortar y ajustar"
                   >
                     <Crop className="w-4 h-4" />
-                    <span>Encuadre 1:1</span>
+                    <span>Ajustar</span>
                   </button>
                 </div>
               </div>

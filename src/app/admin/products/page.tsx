@@ -7,6 +7,7 @@ import { Product } from '@/types';
 import { SquareImageContainer } from '@/components/ui/SquareImageContainer';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { formatImageUrl } from '@/lib/imageUtils';
+import { supabase, STORAGE_BUCKET } from '@/lib/supabase';
 import {
   Plus,
   Edit2,
@@ -21,6 +22,8 @@ import {
   TrendingUp,
   FileText,
   Sparkles,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
@@ -41,6 +44,34 @@ export default function AdminProductsPage() {
   // Crop Modal State
   const [isCropOpen, setIsCropOpen] = useState(false);
   const [cropTargetUrl, setCropTargetUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${crypto.randomUUID().substring(0, 8)}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
+      if (data?.publicUrl) {
+        setImageUrl(data.publicUrl);
+      }
+    } catch (err: unknown) {
+      alert('Error al subir la imagen: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const categoriesList = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
 
@@ -284,11 +315,33 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              {/* URL Imagen */}
+              {/* URL Imagen o Subir Archivo */}
               <div className="lg:col-span-4">
-                <label className="block text-xs font-bold text-zinc-300 mb-1.5">
-                  URL de Imagen (Google Drive / Web)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-300">
+                    Foto del Producto (Subir o Enlace)
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-400 hover:text-purple-300 cursor-pointer">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Subiendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>📁 Subir desde Dispositivo</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -296,7 +349,7 @@ export default function AdminProductsPage() {
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     className="flex-1 px-4 py-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 font-mono focus:outline-none focus:border-purple-500"
-                    placeholder="https://drive.google.com/... o https://images..."
+                    placeholder="https://... o sube una foto con el botón de arriba"
                   />
                   <button
                     type="button"
@@ -306,9 +359,10 @@ export default function AdminProductsPage() {
                       setIsCropOpen(true);
                     }}
                     className="flex items-center gap-1 px-3.5 py-3 rounded-2xl bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold hover:bg-purple-600/50 transition-colors shrink-0"
+                    title="Recortar y ajustar"
                   >
                     <Crop className="w-4 h-4" />
-                    <span>1:1</span>
+                    <span>Ajustar</span>
                   </button>
                 </div>
               </div>
