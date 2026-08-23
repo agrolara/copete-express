@@ -19,17 +19,28 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Cuerpo de solicitud inválido' }, { status: 400 });
+    }
+
     const { action, payload } = body;
+    if (!action || typeof action !== 'string') {
+      return NextResponse.json({ error: 'Acción requerida' }, { status: 400 });
+    }
+
     const store = await getStoreAsync();
 
     if (action === 'SAVE_ALL') {
-      if (payload.products !== undefined) store.products = payload.products;
-      if (payload.promotions !== undefined) store.promotions = payload.promotions;
-      if (payload.sales !== undefined) store.sales = payload.sales;
-      if (payload.invoices !== undefined) store.invoices = payload.invoices;
-      if (payload.expenses !== undefined) store.expenses = payload.expenses;
-      if (payload.whatsappNumber) store.whatsappNumber = payload.whatsappNumber;
-      if (payload.bankDetails) store.bankDetails = payload.bankDetails;
+      if (!payload || typeof payload !== 'object') {
+        return NextResponse.json({ error: 'Payload inválido' }, { status: 400 });
+      }
+      if (Array.isArray(payload.products)) store.products = payload.products;
+      if (Array.isArray(payload.promotions)) store.promotions = payload.promotions;
+      if (Array.isArray(payload.sales)) store.sales = payload.sales;
+      if (Array.isArray(payload.invoices)) store.invoices = payload.invoices;
+      if (Array.isArray(payload.expenses)) store.expenses = payload.expenses;
+      if (typeof payload.whatsappNumber === 'string') store.whatsappNumber = payload.whatsappNumber;
+      if (payload.bankDetails && typeof payload.bankDetails === 'object') store.bankDetails = payload.bankDetails;
       await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }

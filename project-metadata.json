@@ -1,0 +1,45 @@
+{
+  "id": "copete-express",
+  "name": "Copete Express",
+  "description": "Plataforma E-Commerce y POS para Delivery de Licores con sincronización Supabase Realtime, gestión de facturas, arqueo de caja y WhatsApp Checkout",
+  "version": "1.0.0",
+  "category": "E-Commerce / Finanzas",
+  "status": "live",
+  "liveUrl": "https://copeteexpress.agrolara.dedyn.io",
+  "adminUrl": "https://copeteexpress.agrolara.dedyn.io/admin",
+  "repository": "https://github.com/agrolara/copete-express",
+  "stack": {
+    "frontend": [
+      "Next.js 14 (App Router)",
+      "React",
+      "Tailwind CSS",
+      "Lucide Icons",
+      "Recharts"
+    ],
+    "backend": [
+      "Next.js Route Handlers",
+      "Node.js 20"
+    ],
+    "database": [
+      "Supabase PostgreSQL",
+      "Supabase Realtime (WebSockets)"
+    ],
+    "storage": [
+      "Supabase Storage (copete-express-media)"
+    ],
+    "infrastructure": [
+      "Coolify",
+      "Docker Multi-stage",
+      "Traefik",
+      "Let's Encrypt SSL"
+    ]
+  },
+  "metrics": {
+    "productsCount": 29,
+    "promotionsCount": 17,
+    "realtimeLatency": "< 50ms",
+    "productionBuild": "Standalone (Optimized)",
+    "securityScore": "88/100"
+  },
+  "auditedAt": "2026-08-23T04:44:44.739Z"
+}
