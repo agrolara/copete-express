@@ -36,6 +36,9 @@ import {
   Receipt,
   Tag,
   Percent,
+  Users,
+  Search,
+  History,
 } from 'lucide-react';
 import {
   BarChart,
@@ -91,6 +94,82 @@ export default function AdminDashboardPage() {
   const [summaryWhatsappUrl, setSummaryWhatsappUrl] = useState('');
   const [summaryClientWhatsappUrl, setSummaryClientWhatsappUrl] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Estados para búsqueda y selección de Clientes Habituales
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<{
+    name: string;
+    phone: string;
+    address: string;
+    orderCount: number;
+  } | null>(null);
+
+  // Directorio de Clientes Habituales extraído dinámicamente del historial de ventas
+  const regularCustomers = useMemo(() => {
+    const customerMap = new Map<string, {
+      name: string;
+      phone: string;
+      address: string;
+      orderCount: number;
+      lastOrderDate: string;
+      totalSpent: number;
+    }>();
+
+    sales.forEach((sale) => {
+      const cleanPhone = sale.customer_phone?.replace(/[^0-9]/g, '') || '';
+      const key = cleanPhone.length >= 6 ? cleanPhone : (sale.customer_name?.trim().toLowerCase() || '');
+      if (!key) return;
+
+      const existing = customerMap.get(key);
+      if (!existing) {
+        customerMap.set(key, {
+          name: sale.customer_name?.trim() || 'Cliente',
+          phone: sale.customer_phone?.trim() || '',
+          address: sale.delivery_address?.trim() || '',
+          orderCount: 1,
+          lastOrderDate: sale.created_at,
+          totalSpent: sale.total_amount || 0,
+        });
+      } else {
+        existing.orderCount += 1;
+        existing.totalSpent += sale.total_amount || 0;
+        if (new Date(sale.created_at) > new Date(existing.lastOrderDate)) {
+          existing.address = sale.delivery_address?.trim() || existing.address;
+          existing.lastOrderDate = sale.created_at;
+          if (sale.customer_name) existing.name = sale.customer_name.trim();
+        }
+      }
+    });
+
+    return Array.from(customerMap.values()).sort((a, b) => b.orderCount - a.orderCount);
+  }, [sales]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchQuery.trim()) return [];
+    const q = customerSearchQuery.toLowerCase().trim();
+    const cleanQ = q.replace(/[^0-9]/g, '');
+    return regularCustomers.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      (cleanQ && c.phone.replace(/[^0-9]/g, '').includes(cleanQ)) ||
+      c.address.toLowerCase().includes(q)
+    ).slice(0, 6);
+  }, [regularCustomers, customerSearchQuery]);
+
+  const handleSelectCustomer = (cust: { name: string; phone: string; address: string; orderCount: number }) => {
+    setCustomerName(cust.name);
+    setCustomerPhone(cust.phone);
+    setDeliveryAddress(cust.address);
+    setSelectedCustomerProfile(cust);
+    setCustomerSearchQuery('');
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomerProfile(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setDeliveryAddress('');
+    setCustomerSearchQuery('');
+  };
 
   // State para modal de configuración de WhatsApp y Banco (Super Admin)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1035,7 +1114,10 @@ export default function AdminDashboardPage() {
                     <span>{copied ? '¡Copiado!' : 'Copiar Texto al Portapapeles'}</span>
                   </button>
                   <button
-                    onClick={() => setGeneratedSummary('')}
+                    onClick={() => {
+                      setGeneratedSummary('');
+                      handleClearCustomer();
+                    }}
                     className="px-4 py-2.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white font-bold text-xs"
                   >
                     Nuevo Pedido
@@ -1044,6 +1126,111 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <form onSubmit={handleProcessAdminOrder} className="space-y-4">
+                {/* BUSCADOR DE CLIENTES HABITUALES (HISTORIAL DE VENTAS) */}
+                <div className="p-3.5 rounded-2xl bg-zinc-950 border border-purple-500/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-purple-400" />
+                      <span>Buscar Cliente Habitual (Historial de Ventas)</span>
+                    </label>
+                    {regularCustomers.length > 0 && (
+                      <span className="text-[10px] text-purple-300 font-bold bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-500/40">
+                        {regularCustomers.length} {regularCustomers.length === 1 ? 'cliente guardado' : 'clientes guardados'}
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedCustomerProfile ? (
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-purple-950/60 to-zinc-900 border border-purple-500/60 flex items-center justify-between gap-3 animate-fade-in shadow-neon-purple">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-black text-xs shrink-0 shadow-md">
+                          {selectedCustomerProfile.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-black text-white truncate">{selectedCustomerProfile.name}</span>
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/40 shrink-0">
+                              {selectedCustomerProfile.orderCount} {selectedCustomerProfile.orderCount === 1 ? 'pedido anterior' : 'pedidos anteriores'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-300 truncate mt-0.5">
+                            📞 {selectedCustomerProfile.phone} • 📍 {selectedCustomerProfile.address}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearCustomer}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-bold transition-all shrink-0"
+                      >
+                        Cambiar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-3" />
+                        <input
+                          type="text"
+                          value={customerSearchQuery}
+                          onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                          placeholder="Buscar por nombre o número de teléfono (+56 9...)"
+                          className="w-full pl-9 pr-8 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors"
+                        />
+                        {customerSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setCustomerSearchQuery('')}
+                            className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-white"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Lista de coincidencias sugeridas */}
+                      {filteredCustomers.length > 0 && (
+                        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block px-1">
+                            Clientes coincidentes (Clic para autocompletar):
+                          </span>
+                          {filteredCustomers.map((cust, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSelectCustomer(cust)}
+                              className="w-full text-left p-2.5 rounded-xl bg-zinc-900 hover:bg-purple-950/70 border border-zinc-800 hover:border-purple-500/60 transition-all flex items-center justify-between gap-2 group"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">{cust.name}</span>
+                                  <span className="text-[10px] font-bold text-purple-300 bg-purple-950/90 px-1.5 py-0.5 rounded border border-purple-500/40">
+                                    {cust.orderCount} {cust.orderCount === 1 ? 'pedido' : 'pedidos'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-zinc-400 truncate flex items-center gap-2 mt-0.5">
+                                  <span className="text-white font-medium">📞 {cust.phone}</span>
+                                  <span>•</span>
+                                  <span className="truncate">📍 {cust.address}</span>
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-bold text-purple-400 group-hover:text-purple-300 shrink-0">
+                                Seleccionar →
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {customerSearchQuery && filteredCustomers.length === 0 && (
+                        <div className="p-2 text-center text-zinc-500 text-xs">
+                          No hay clientes anteriores con "{customerSearchQuery}". Puedes rellenar los datos abajo para guardarlo como nuevo cliente.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-400 mb-1">Nombre Cliente</label>
@@ -1053,7 +1240,7 @@ export default function AdminDashboardPage() {
                       placeholder="Ej: Pedro Soto"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-purple-500"
                     />
                   </div>
                   <div>
@@ -1064,7 +1251,7 @@ export default function AdminDashboardPage() {
                       placeholder="+56 9 8765 4321"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-purple-500"
                     />
                   </div>
                   <div>
@@ -1075,7 +1262,7 @@ export default function AdminDashboardPage() {
                       placeholder="Ej: Av Providencia 123"
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white"
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white focus:outline-none focus:border-purple-500"
                     />
                   </div>
                 </div>
@@ -1396,6 +1583,7 @@ export default function AdminDashboardPage() {
                       setIsOrderModalOpen(false);
                       setDiscountType('none');
                       setDiscountValue(0);
+                      handleClearCustomer();
                     }}
                     className="px-4 py-2.5 text-xs font-semibold text-zinc-400 hover:text-white"
                   >
