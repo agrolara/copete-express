@@ -117,13 +117,17 @@ export default function AdminDashboardPage() {
 
     sales.forEach((sale) => {
       const cleanPhone = sale.customer_phone?.replace(/[^0-9]/g, '') || '';
-      const key = cleanPhone.length >= 6 ? cleanPhone : (sale.customer_name?.trim().toLowerCase() || '');
+      const cleanName = sale.customer_name?.trim() || '';
+      if (!cleanName && !cleanPhone) return;
+
+      // Clave única basada en Nombre + Teléfono para identificar individualmente a cada cliente
+      const key = cleanName ? `${cleanName.toLowerCase()}_${cleanPhone}` : cleanPhone;
       if (!key) return;
 
       const existing = customerMap.get(key);
       if (!existing) {
         customerMap.set(key, {
-          name: sale.customer_name?.trim() || 'Cliente',
+          name: cleanName || 'Cliente',
           phone: sale.customer_phone?.trim() || '',
           address: sale.delivery_address?.trim() || '',
           orderCount: 1,
@@ -136,7 +140,7 @@ export default function AdminDashboardPage() {
         if (new Date(sale.created_at) > new Date(existing.lastOrderDate)) {
           existing.address = sale.delivery_address?.trim() || existing.address;
           existing.lastOrderDate = sale.created_at;
-          if (sale.customer_name) existing.name = sale.customer_name.trim();
+          if (cleanName) existing.name = cleanName;
         }
       }
     });
@@ -145,14 +149,16 @@ export default function AdminDashboardPage() {
   }, [sales]);
 
   const filteredCustomers = useMemo(() => {
-    if (!customerSearchQuery.trim()) return [];
+    if (!customerSearchQuery.trim()) {
+      return regularCustomers.slice(0, 4); // Si no ha escrito nada, mostrar los clientes más frecuentes
+    }
     const q = customerSearchQuery.toLowerCase().trim();
     const cleanQ = q.replace(/[^0-9]/g, '');
     return regularCustomers.filter((c) =>
       c.name.toLowerCase().includes(q) ||
       (cleanQ && c.phone.replace(/[^0-9]/g, '').includes(cleanQ)) ||
       c.address.toLowerCase().includes(q)
-    ).slice(0, 6);
+    ).slice(0, 8);
   }, [regularCustomers, customerSearchQuery]);
 
   const handleSelectCustomer = (cust: { name: string; phone: string; address: string; orderCount: number }) => {
@@ -1192,7 +1198,9 @@ export default function AdminDashboardPage() {
                       {filteredCustomers.length > 0 && (
                         <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
                           <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block px-1">
-                            Clientes coincidentes (Clic para autocompletar):
+                            {customerSearchQuery
+                              ? `Clientes coincidentes con "${customerSearchQuery}":`
+                              : 'Clientes frecuentes recientes (Clic para autocompletar):'}
                           </span>
                           {filteredCustomers.map((cust, idx) => (
                             <button
