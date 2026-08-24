@@ -431,12 +431,6 @@ export default function AdminDashboardPage() {
 
   const criticalStockProducts = products.filter((p) => p.stock < 3);
 
-  const handleQuickRestock = (productId: string, amount: number) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, stock: p.stock + amount } : p))
-    );
-  };
-
   const toggleItemSelection = (id: string, type: 'product' | 'promotion') => {
     setSelectedItems((prev) => {
       const current = prev[id] || { selected: false, quantity: 1, type };
@@ -656,7 +650,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* BANNER DE ALERTA DE STOCK CRÍTICO (< 3) */}
+      {/* ALERTA DE STOCK CRÍTICO */}
       {criticalStockProducts.length > 0 && (
         <section className="p-5 rounded-3xl bg-gradient-to-r from-red-950/80 via-zinc-900 to-orange-950/80 border-2 border-red-500/60 shadow-neon-red space-y-4">
           <div className="flex items-center justify-between">
@@ -668,19 +662,19 @@ export default function AdminDashboardPage() {
                 <h3 className="text-base font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
                   <span>Alerta de Stock Crítico</span>
                   <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs">
-                    {criticalStockProducts.length} Productos
+                    {criticalStockProducts.length} {criticalStockProducts.length === 1 ? 'Producto' : 'Productos'}
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-300">
-                  Menos de 3 unidades en bodega. Reabastece con 1 clic o ingresa factura:
+                  Menos de 3 unidades en bodega. Ingresa una factura de abastecimiento para reponer stock:
                 </p>
               </div>
             </div>
             <Link
               href="/admin/invoices"
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors"
+              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-4 h-4" />
               <span>Ingresar Factura</span>
             </Link>
           </div>
@@ -691,19 +685,19 @@ export default function AdminDashboardPage() {
                 key={prod.id}
                 className="p-3 rounded-2xl bg-zinc-950/90 border border-red-500/30 flex items-center justify-between gap-3"
               >
-                <div>
-                  <h4 className="text-xs font-bold text-white truncate max-w-[140px]">{prod.name}</h4>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">{prod.name}</h4>
                   <span className="text-[11px] font-extrabold text-red-400">
                     Stock actual: {prod.stock} un.
                   </span>
                 </div>
-                <button
-                  onClick={() => handleQuickRestock(prod.id, 10)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md transition-colors"
+                <Link
+                  href="/admin/invoices"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-all shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+10 Stock</span>
-                </button>
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Factura</span>
+                </Link>
               </div>
             ))}
           </div>
