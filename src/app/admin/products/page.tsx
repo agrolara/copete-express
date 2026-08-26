@@ -24,6 +24,7 @@ import {
   Sparkles,
   Upload,
   Loader2,
+  Lock,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
@@ -130,7 +131,7 @@ export default function AdminProductsPage() {
                 category,
                 price: Number(price),
                 cost_price: Number(costPrice),
-                stock: Number(stock),
+                stock: editingProduct.stock, // Stock protegido contra edición manual
                 image_url: cleanedImageUrl,
               }
             : p
@@ -144,7 +145,7 @@ export default function AdminProductsPage() {
         category,
         price: Number(price),
         cost_price: Number(costPrice),
-        stock: Number(stock),
+        stock: 0, // Stock inicial en 0, solo se incrementa mediante Facturas de Abastecimiento
         image_url: cleanedImageUrl,
         is_active: true,
       };
@@ -288,17 +289,24 @@ export default function AdminProductsPage() {
 
             {/* FILA 2: STOCK, MARGEN CALCULADO, URL IMAGEN Y DESCRIPCIÓN */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-5 items-center">
-              {/* Stock Inicial */}
+              {/* Stock Protegido (Solo Lectura) */}
               <div className="lg:col-span-2">
-                <label className="block text-xs font-bold text-zinc-300 mb-1.5">Stock en Bodega (un.) *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={stock}
-                  onChange={(e) => setStock(parseInt(e.target.value) || 0)}
-                  className="w-full px-4 py-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-center text-white font-mono font-black text-sm focus:outline-none focus:border-purple-500"
-                />
+                <label className="block text-xs font-bold text-zinc-400 mb-1.5 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Stock en Bodega</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    disabled
+                    readOnly
+                    value={editingProduct ? editingProduct.stock : 0}
+                    className="w-full px-4 py-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-center text-zinc-400 font-mono font-black text-sm cursor-not-allowed select-none"
+                  />
+                </div>
+                <span className="text-[10px] text-amber-400/90 font-medium block mt-1 leading-tight">
+                  🔒 Carga stock ingresando Facturas
+                </span>
               </div>
 
               {/* Margen Calculado */}

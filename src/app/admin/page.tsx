@@ -69,12 +69,15 @@ export default function AdminDashboardPage() {
     bankDetails,
     setBankDetails,
     createAdminOrder,
+    confirmPendingOrder,
+    cancelPendingOrder,
     resetAllData,
   } = useCart();
 
   // Estado del Filtro Temporal (Por Día, Por Semana, Por Mes, Todo)
   const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
+  const [isProcessingPending, setIsProcessingPending] = useState<string | null>(null);
 
   // Modal para Crear Pedido Manual por WhatsApp (Administradores)
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -503,18 +506,46 @@ export default function AdminDashboardPage() {
     { day: 'Dom', Ventas: daysOfWeekMap['Dom'].ventas, Costos: daysOfWeekMap['Dom'].costos, Gastos: daysOfWeekMap['Dom'].gastos, Utilidad: daysOfWeekMap['Dom'].ganancia },
   ];
 
-  // 6. Salud de Stock
-  const healthyCount = products.filter((p) => p.stock >= 3).length;
-  const criticalCount = products.filter((p) => p.stock > 0 && p.stock < 3).length;
+  // 6. Salud de Stock (Umbral de 6 unidades solicitado por el usuario)
+  const healthyCount = products.filter((p) => p.stock >= 6).length;
+  const criticalCount = products.filter((p) => p.stock > 0 && p.stock < 6).length;
   const outOfStockCount = products.filter((p) => p.stock === 0).length;
 
   const stockPieData = [
-    { name: 'Stock Saludable (>=3)', value: healthyCount, color: '#10b981' },
-    { name: 'Stock Crítico (<3)', value: criticalCount, color: '#f59e0b' },
+    { name: 'Stock Saludable (>=6)', value: healthyCount, color: '#10b981' },
+    { name: 'Stock Crítico (<6)', value: criticalCount, color: '#f59e0b' },
     { name: 'Agotados (0)', value: outOfStockCount, color: '#ef4444' },
   ];
 
-  const criticalStockProducts = products.filter((p) => p.stock < 3);
+  const criticalStockProducts = products.filter((p) => p.stock < 6);
+
+  // Lista de Pedidos Web Pendientes de Confirmar
+  const pendingOrders = useMemo(() => {
+    return sales.filter((s) => s.status === 'pending');
+  }, [sales]);
+
+  const handleConfirmPending = async (saleId: string) => {
+    setIsProcessingPending(saleId);
+    try {
+      const res = await confirmPendingOrder(saleId);
+      if (!res.success) {
+        alert(res.message);
+      }
+    } finally {
+      setIsProcessingPending(null);
+    }
+  };
+
+  const handleCancelPending = async (saleId: string) => {
+    if (confirm('¿Deseas rechazar/cancelar este pedido web pendiente?')) {
+      setIsProcessingPending(saleId);
+      try {
+        await cancelPendingOrder(saleId);
+      } finally {
+        setIsProcessingPending(null);
+      }
+    }
+  };
 
   const toggleItemSelection = (id: string, type: 'product' | 'promotion') => {
     setSelectedItems((prev) => {
@@ -735,6 +766,117 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* SECCIÓN PEDIDOS WEB RECIBIDOS PENDIENTES DE CONFIRMACIÓN */}
+      {pendingOrders.length > 0 && (
+        <section className="p-5 rounded-3xl bg-gradient-to-r from-amber-950/80 via-zinc-900 to-yellow-950/80 border-2 border-amber-500/60 shadow-neon-amber space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-600/30 text-amber-400 border border-amber-500/40 animate-pulse">
+                <ShoppingBag className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>Pedidos Web Pendientes</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-black font-black text-xs">
+                    {pendingOrders.length} {pendingOrders.length === 1 ? 'por confirmar' : 'por confirmar'}
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-300">
+                  Pedidos generados por clientes en la tienda pública. Confírmalos con 1 clic para validar y descontar automáticamente el stock de bodega:
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pendingOrders.map((order) => {
+              const clientPhoneDigits = order.customer_phone.replace(/[^0-9]/g, '');
+              const waLink = clientPhoneDigits ? `https://wa.me/${clientPhoneDigits}` : null;
+
+              return (
+                <div
+                  key={order.id}
+                  className="p-4 rounded-2xl bg-zinc-950/90 border border-amber-500/40 space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-sm font-black text-white">{order.customer_name}</h4>
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1.5 mt-0.5">
+                          <span>📞 {order.customer_phone}</span>
+                          {waLink && (
+                            <a
+                              href={waLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-400 hover:underline font-bold"
+                            >
+                              [WhatsApp]
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-500/30 shrink-0">
+                        {order.payment_method === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-zinc-300 bg-zinc-900/80 p-2 rounded-xl border border-zinc-800/80">
+                      📍 <span className="font-medium text-white">{order.delivery_address}</span>
+                    </p>
+
+                    {/* Ítems del pedido */}
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[10px] uppercase font-bold text-zinc-500 block">Ítems pedidos:</span>
+                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                        {order.items?.map((it, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs text-zinc-300">
+                            <span className="truncate">• {it.item_name} x{it.quantity}</span>
+                            <span className="font-mono font-bold text-zinc-200 shrink-0">
+                              ${(it.unit_price * it.quantity).toLocaleString('es-CL')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-zinc-400">Total a Cobrar:</span>
+                      <span className="text-base font-black text-emerald-400 font-mono">
+                        ${order.total_amount.toLocaleString('es-CL')}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={isProcessingPending === order.id}
+                        onClick={() => handleConfirmPending(order.id)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:opacity-95 text-white font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirmar y Descontar</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessingPending === order.id}
+                        onClick={() => handleCancelPending(order.id)}
+                        className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-red-400 text-xs font-bold transition-colors"
+                        title="Rechazar pedido"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ALERTA DE STOCK CRÍTICO */}
       {criticalStockProducts.length > 0 && (
         <section className="p-5 rounded-3xl bg-gradient-to-r from-red-950/80 via-zinc-900 to-orange-950/80 border-2 border-red-500/60 shadow-neon-red space-y-4">
@@ -751,7 +893,7 @@ export default function AdminDashboardPage() {
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-300">
-                  Menos de 3 unidades en bodega. Ingresa una factura de abastecimiento para reponer stock:
+                  Menos de 6 unidades en bodega. Ingresa una factura de abastecimiento para reponer stock:
                 </p>
               </div>
             </div>

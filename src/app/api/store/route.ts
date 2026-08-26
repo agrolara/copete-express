@@ -77,6 +77,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, store });
     }
 
+    if (action === 'CONFIRM_SALE') {
+      const { sale, updatedProducts } = payload;
+      store.sales = store.sales.map((s) => (s.id === sale.id ? sale : s));
+      if (updatedProducts) {
+        store.products = updatedProducts;
+      }
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'CANCEL_SALE') {
+      const { sale } = payload;
+      store.sales = store.sales.map((s) => (s.id === sale.id ? sale : s));
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'UPDATE_SALE') {
+      const { sale, updatedProducts } = payload;
+      store.sales = store.sales.map((s) => (s.id === sale.id ? sale : s));
+      if (updatedProducts) {
+        store.products = updatedProducts;
+      }
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
     if (action === 'ADD_INVOICE') {
       const { invoice, updatedProducts } = payload;
       store.invoices = [invoice, ...(store.invoices || [])];

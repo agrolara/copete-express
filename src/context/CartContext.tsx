@@ -43,6 +43,9 @@ interface CartContextType {
   setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>;
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   deleteSale: (saleId: string, restoreStock?: boolean) => void;
+  confirmPendingOrder: (saleId: string) => Promise<{ success: boolean; message: string }>;
+  cancelPendingOrder: (saleId: string) => Promise<{ success: boolean; message: string }>;
+  updateSale: (updatedSale: Sale) => Promise<{ success: boolean; message: string }>;
   addInvoice: (
     invoiceData: Omit<Invoice, 'id' | 'created_at'>,
     newProducts?: Product[]
@@ -375,12 +378,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Eliminar venta y opcionalmente restaurar el stock al catálogo
+  // Eliminar venta y opcionalmente restaurar el stock al catálogo (solo si la venta fue completada)
   const deleteSale = async (saleId: string, restoreStock: boolean = true) => {
     const saleToDelete = sales.find((s) => s.id === saleId);
     let updatedProducts = [...products];
+    const shouldRestore = restoreStock && saleToDelete && saleToDelete.status === 'completed';
 
-    if (saleToDelete && restoreStock && saleToDelete.items) {
+    if (shouldRestore && saleToDelete.items) {
       saleToDelete.items.forEach((item) => {
         if (item.product_id) {
           const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
@@ -409,7 +413,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProductsState(updatedProducts);
     }
 
-    setSalesState((prev) => prev.filter((s) => s.id !== saleId));
+    setSalesState((prev) => {
+      const next = prev.filter((s) => s.id !== saleId);
+      saveLocalBackup({ sales: next, products: shouldRestore ? updatedProducts : undefined });
+      return next;
+    });
 
     try {
       await fetch('/api/store', {
@@ -417,12 +425,210 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'DELETE_SALE',
-          payload: { saleId, updatedProducts: restoreStock ? updatedProducts : null },
+          payload: { saleId, updatedProducts: shouldRestore ? updatedProducts : null },
         }),
       });
     } catch (e) {
       console.error('Error enviando deleteSale al servidor:', e);
     }
+  };
+
+  // Confirmar Pedido Web Pendiente y Descontar Stock de Bodega con 1 Clic
+  const confirmPendingOrder = async (saleId: string): Promise<{ success: boolean; message: string }> => {
+    const sale = sales.find((s) => s.id === saleId);
+    if (!sale) return { success: false, message: 'Pedido no encontrado.' };
+    if (sale.status === 'completed') return { success: false, message: 'Este pedido ya fue confirmado.' };
+
+    const updatedProducts = [...products];
+
+    // Validar disponibilidad de stock para cada ítem
+    if (sale.items) {
+      for (const item of sale.items) {
+        if (item.product_id) {
+          const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+          if (pIdx === -1 || updatedProducts[pIdx].stock < item.quantity) {
+            return {
+              success: false,
+              message: `Stock insuficiente para ${item.item_name} (Disponibles: ${pIdx > -1 ? updatedProducts[pIdx].stock : 0}, Requeridos: ${item.quantity}).`,
+            };
+          }
+          updatedProducts[pIdx] = {
+            ...updatedProducts[pIdx],
+            stock: updatedProducts[pIdx].stock - item.quantity,
+          };
+        } else if (item.promotion_id) {
+          const promo = promotions.find((p) => p.id === item.promotion_id);
+          if (promo && promo.items) {
+            for (const pi of promo.items) {
+              const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
+              const needed = pi.quantity * item.quantity;
+              if (pIdx === -1 || updatedProducts[pIdx].stock < needed) {
+                return {
+                  success: false,
+                  message: `Stock insuficiente para armar el pack ${promo.name}.`,
+                };
+              }
+              updatedProducts[pIdx] = {
+                ...updatedProducts[pIdx],
+                stock: updatedProducts[pIdx].stock - needed,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    const completedSale: Sale = { ...sale, status: 'completed' };
+
+    setProductsState(updatedProducts);
+    setSalesState((prev) => {
+      const next = prev.map((s) => (s.id === saleId ? completedSale : s));
+      saveLocalBackup({ sales: next, products: updatedProducts });
+      return next;
+    });
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CONFIRM_SALE',
+          payload: { sale: completedSale, updatedProducts },
+        }),
+      });
+    } catch (e) {
+      console.error('Error confirmando venta en el servidor:', e);
+    }
+
+    return { success: true, message: '¡Pedido confirmado y stock descontado con éxito!' };
+  };
+
+  // Cancelar Pedido Web Pendiente (sin modificar stock)
+  const cancelPendingOrder = async (saleId: string): Promise<{ success: boolean; message: string }> => {
+    const sale = sales.find((s) => s.id === saleId);
+    if (!sale) return { success: false, message: 'Pedido no encontrado.' };
+
+    const cancelledSale: Sale = { ...sale, status: 'cancelled' };
+
+    setSalesState((prev) => {
+      const next = prev.map((s) => (s.id === saleId ? cancelledSale : s));
+      saveLocalBackup({ sales: next });
+      return next;
+    });
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CANCEL_SALE',
+          payload: { sale: cancelledSale },
+        }),
+      });
+    } catch (e) {
+      console.error('Error cancelando venta en el servidor:', e);
+    }
+
+    return { success: true, message: 'Pedido marcado como cancelado.' };
+  };
+
+  // Actualizar Venta Existente (Datos de cliente, productos, cantidades y reconciliación de inventario)
+  const updateSale = async (updatedSale: Sale): Promise<{ success: boolean; message: string }> => {
+    const oldSale = sales.find((s) => s.id === updatedSale.id);
+    if (!oldSale) return { success: false, message: 'Venta no encontrada.' };
+
+    let updatedProducts = [...products];
+
+    // Reconciliación de inventario si la venta estaba/sigue completada
+    if (oldSale.status === 'completed' && updatedSale.status === 'completed') {
+      // 1. Revertir temporalmente el stock del pedido anterior
+      if (oldSale.items) {
+        oldSale.items.forEach((item) => {
+          if (item.product_id) {
+            const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+            if (pIdx > -1) {
+              updatedProducts[pIdx] = {
+                ...updatedProducts[pIdx],
+                stock: updatedProducts[pIdx].stock + item.quantity,
+              };
+            }
+          } else if (item.promotion_id) {
+            const promo = promotions.find((p) => p.id === item.promotion_id);
+            if (promo && promo.items) {
+              promo.items.forEach((pi) => {
+                const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
+                if (pIdx > -1) {
+                  updatedProducts[pIdx] = {
+                    ...updatedProducts[pIdx],
+                    stock: updatedProducts[pIdx].stock + pi.quantity * item.quantity,
+                  };
+                }
+              });
+            }
+          }
+        });
+      }
+
+      // 2. Descontar el stock según los nuevos ítems verificando existencias
+      if (updatedSale.items) {
+        for (const item of updatedSale.items) {
+          if (item.product_id) {
+            const pIdx = updatedProducts.findIndex((p) => p.id === item.product_id);
+            if (pIdx === -1 || updatedProducts[pIdx].stock < item.quantity) {
+              return {
+                success: false,
+                message: `Stock insuficiente para ${item.item_name} al actualizar (Disponibles: ${pIdx > -1 ? updatedProducts[pIdx].stock : 0}, Requeridos: ${item.quantity}).`,
+              };
+            }
+            updatedProducts[pIdx] = {
+              ...updatedProducts[pIdx],
+              stock: updatedProducts[pIdx].stock - item.quantity,
+            };
+          } else if (item.promotion_id) {
+            const promo = promotions.find((p) => p.id === item.promotion_id);
+            if (promo && promo.items) {
+              for (const pi of promo.items) {
+                const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
+                const needed = pi.quantity * item.quantity;
+                if (pIdx === -1 || updatedProducts[pIdx].stock < needed) {
+                  return {
+                    success: false,
+                    message: `Stock insuficiente para pack ${promo.name} al actualizar.`,
+                  };
+                }
+                updatedProducts[pIdx] = {
+                  ...updatedProducts[pIdx],
+                  stock: updatedProducts[pIdx].stock - needed,
+                };
+              }
+            }
+          }
+        }
+      }
+
+      setProductsState(updatedProducts);
+    }
+
+    setSalesState((prev) => {
+      const next = prev.map((s) => (s.id === updatedSale.id ? updatedSale : s));
+      saveLocalBackup({ sales: next, products: updatedProducts });
+      return next;
+    });
+
+    try {
+      await fetch('/api/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_SALE',
+          payload: { sale: updatedSale, updatedProducts },
+        }),
+      });
+    } catch (e) {
+      console.error('Error actualizando venta en el servidor:', e);
+    }
+
+    return { success: true, message: 'Venta actualizada correctamente.' };
   };
 
   // 1. INGRESO DE FACTURA DE COMPRA DE PROVEEDOR E INVENTARIO
@@ -758,7 +964,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Proceso de Checkout y Guardado Centralizado de Ventas
+  // Proceso de Checkout y Guardado Centralizado de Ventas Web (Estado Pendiente, SIN descontar stock de bodega de inmediato)
   const processCheckout = async (
     customerName: string,
     customerPhone: string,
@@ -769,62 +975,35 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'El carrito está vacío.' };
     }
 
-    const updatedProducts = [...products];
     let calculatedTotal = 0;
     const saleItemsList: SaleItem[] = [];
 
-    // Validar y descontar stock
+    // Compilar lista de ítems sin descontar stock
     for (const item of cart) {
       if (item.type === 'product') {
-        const pIndex = updatedProducts.findIndex((p) => p.id === item.id);
-        if (pIndex === -1 || updatedProducts[pIndex].stock < item.quantity) {
-          return {
-            success: false,
-            message: `Stock insuficiente para el producto ${item.name}.`,
-          };
-        }
-        updatedProducts[pIndex] = {
-          ...updatedProducts[pIndex],
-          stock: updatedProducts[pIndex].stock - item.quantity,
-        };
+        const prod = products.find((p) => p.id === item.id);
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
           product_id: item.id,
           quantity: item.quantity,
           unit_price: item.price,
-          cost_price: updatedProducts[pIndex].cost_price || Math.round(item.price * 0.6),
+          cost_price: prod?.cost_price || Math.round(item.price * 0.6),
           item_name: item.name,
         });
         calculatedTotal += item.price * item.quantity;
       } else {
         const promo = promotions.find((p) => p.id === item.id);
-        if (promo && promo.items) {
-          for (const pi of promo.items) {
-            const pIndex = updatedProducts.findIndex((p) => p.id === pi.product_id);
-            const needed = pi.quantity * item.quantity;
-            if (pIndex === -1 || updatedProducts[pIndex].stock < needed) {
-              return {
-                success: false,
-                message: `Stock insuficiente para armar el pack ${promo.name}.`,
-              };
-            }
-            updatedProducts[pIndex] = {
-              ...updatedProducts[pIndex],
-              stock: updatedProducts[pIndex].stock - needed,
-            };
-          }
-          saleItemsList.push({
-            id: crypto.randomUUID(),
-            sale_id: '',
-            promotion_id: promo.id,
-            quantity: item.quantity,
-            unit_price: promo.promo_price,
-            cost_price: Math.round(promo.promo_price * 0.6),
-            item_name: promo.name,
-          });
-          calculatedTotal += promo.promo_price * item.quantity;
-        }
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          promotion_id: promo?.id || item.id,
+          quantity: item.quantity,
+          unit_price: promo?.promo_price || item.price,
+          cost_price: Math.round((promo?.promo_price || item.price) * 0.6),
+          item_name: promo?.name || item.name,
+        });
+        calculatedTotal += (promo?.promo_price || item.price) * item.quantity;
       }
     }
 
@@ -835,16 +1014,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       customer_phone: customerPhone,
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
+      subtotal_amount: calculatedTotal,
+      discount_amount: 0,
       total_amount: calculatedTotal,
-      status: 'completed',
+      status: 'pending', // Pedido Web por Confirmar
       created_at: new Date().toISOString(),
       items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
     };
 
-    setProductsState(updatedProducts);
     setSalesState((prevSales) => {
       const next = [newSale, ...prevSales];
-      saveLocalBackup({ sales: next, products: updatedProducts });
+      saveLocalBackup({ sales: next });
       return next;
     });
     clearCart();
@@ -855,14 +1035,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'ADD_SALE',
-          payload: { sale: newSale, updatedProducts },
+          payload: { sale: newSale },
         }),
       });
     } catch (e) {
-      console.error('Error enviando venta al servidor:', e);
+      console.error('Error enviando venta web al servidor:', e);
     }
 
-    return { success: true, message: 'Pedido registrado con éxito.' };
+    return { success: true, message: 'Pedido registrado como pendiente. Se confirmará desde el panel de administración.' };
   };
 
   // Crear Pedido Manual por Administrador (WhatsApp) con Soporte de Descuento (% o Monto Fijo)
@@ -894,94 +1074,109 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!prod || prod.stock < item.quantity) {
           return {
             success: false,
-            message: `Stock insuficiente para ${prod?.name || 'producto'}.`,
+            message: `Stock insuficiente para ${prod?.name || 'producto'} (Disponibles: ${prod?.stock || 0}, Requeridos: ${item.quantity}).`,
             summaryText: '',
           };
         }
-        const pIdx = updatedProducts.findIndex((p) => p.id === item.id);
-        updatedProducts[pIdx].stock -= item.quantity;
-        const itemSubtotal = prod.price * item.quantity;
-        subtotalAmount += itemSubtotal;
+        const pIndex = updatedProducts.findIndex((p) => p.id === item.id);
+        updatedProducts[pIndex] = {
+          ...updatedProducts[pIndex],
+          stock: updatedProducts[pIndex].stock - item.quantity,
+        };
+
+        const itemTotal = prod.price * item.quantity;
+        subtotalAmount += itemTotal;
         saleItemsList.push({
           id: crypto.randomUUID(),
           sale_id: '',
           product_id: prod.id,
           quantity: item.quantity,
           unit_price: prod.price,
-          cost_price: prod.cost_price || Math.round(prod.price * 0.6),
+          cost_price: prod.cost_price,
           item_name: prod.name,
         });
-        summaryLines.push(`• ${item.quantity}x ${prod.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
+        summaryLines.push(`• *${prod.name}* x${item.quantity} = $${itemTotal.toLocaleString('es-CL')}`);
       } else {
         const promo = promotions.find((p) => p.id === item.id);
-        if (promo && promo.items) {
-          for (const pi of promo.items) {
-            const pIdx = updatedProducts.findIndex((p) => p.id === pi.product_id);
-            const needed = pi.quantity * item.quantity;
-            if (pIdx === -1 || updatedProducts[pIdx].stock < needed) {
-              return {
-                success: false,
-                message: `Stock insuficiente para pack ${promo.name}.`,
-                summaryText: '',
-              };
-            }
-            updatedProducts[pIdx].stock -= needed;
-          }
-          const itemSubtotal = promo.promo_price * item.quantity;
-          subtotalAmount += itemSubtotal;
-          saleItemsList.push({
-            id: crypto.randomUUID(),
-            sale_id: '',
-            promotion_id: promo.id,
-            quantity: item.quantity,
-            unit_price: promo.promo_price,
-            cost_price: Math.round(promo.promo_price * 0.6),
-            item_name: promo.name,
-          });
-          summaryLines.push(`• ${item.quantity}x ${promo.name} - $${itemSubtotal.toLocaleString('es-CL')}`);
+        if (!promo || !promo.items) {
+          return {
+            success: false,
+            message: `Promoción ${item.id} no encontrada.`,
+            summaryText: '',
+          };
         }
+        for (const pi of promo.items) {
+          const pIndex = updatedProducts.findIndex((p) => p.id === pi.product_id);
+          const needed = pi.quantity * item.quantity;
+          if (pIndex === -1 || updatedProducts[pIndex].stock < needed) {
+            return {
+              success: false,
+              message: `Stock insuficiente para armar el pack ${promo.name}.`,
+              summaryText: '',
+            };
+          }
+          updatedProducts[pIndex] = {
+            ...updatedProducts[pIndex],
+            stock: updatedProducts[pIndex].stock - needed,
+          };
+        }
+
+        const promoTotal = promo.promo_price * item.quantity;
+        subtotalAmount += promoTotal;
+        saleItemsList.push({
+          id: crypto.randomUUID(),
+          sale_id: '',
+          promotion_id: promo.id,
+          quantity: item.quantity,
+          unit_price: promo.promo_price,
+          cost_price: Math.round(promo.promo_price * 0.6),
+          item_name: promo.name,
+        });
+        summaryLines.push(`• *PACK: ${promo.name}* x${item.quantity} = $${promoTotal.toLocaleString('es-CL')}`);
       }
     }
 
-    // Cálculo del Descuento
+    // Cálculo de Descuento
     let discountAmount = 0;
-    const discountType = discount?.type || 'none';
-    const discountValue = discount?.value || 0;
+    const dType = discount?.type || 'none';
+    const dVal = discount?.value || 0;
 
-    if (discountType === 'percentage' && discountValue > 0) {
-      discountAmount = Math.round(subtotalAmount * (Math.min(100, discountValue) / 100));
-    } else if (discountType === 'fixed' && discountValue > 0) {
-      discountAmount = Math.min(subtotalAmount, Math.round(discountValue));
+    if (dType === 'percentage' && dVal > 0) {
+      discountAmount = Math.round((subtotalAmount * Math.min(100, Math.max(0, dVal))) / 100);
+    } else if (dType === 'fixed' && dVal > 0) {
+      discountAmount = Math.min(subtotalAmount, dVal);
     }
 
-    const calculatedTotal = Math.max(0, subtotalAmount - discountAmount);
+    const finalTotal = Math.max(0, subtotalAmount - discountAmount);
 
     summaryLines.push(`━━━━━━━━━━━━━━━━━━━━`);
     if (discountAmount > 0) {
       summaryLines.push(`💵 *Subtotal:* $${subtotalAmount.toLocaleString('es-CL')}`);
-      if (discountType === 'percentage') {
-        summaryLines.push(`🏷️ *Descuento (${discountValue}%):* -$${discountAmount.toLocaleString('es-CL')}`);
-      } else {
-        summaryLines.push(`🏷️ *Descuento Especial:* -$${discountAmount.toLocaleString('es-CL')}`);
-      }
-      summaryLines.push(`💰 *TOTAL FINAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
-    } else {
-      summaryLines.push(`💰 *TOTAL A PAGAR:* $${calculatedTotal.toLocaleString('es-CL')}`);
+      summaryLines.push(`🎁 *Descuento ${dType === 'percentage' ? `(${dVal}%)` : ''}:* -$${discountAmount.toLocaleString('es-CL')}`);
     }
+    summaryLines.push(`💰 *TOTAL A PAGAR:* $${finalTotal.toLocaleString('es-CL')}`);
 
     if (paymentMethod === 'transferencia') {
-      summaryLines.push(`\n🏦 *DATOS DE TRANSFERENCIA:*`);
-      summaryLines.push(`• *Banco:* ${bankDetails.banco}`);
-      summaryLines.push(`• *Tipo de Cuenta:* ${bankDetails.tipoCuenta}`);
-      summaryLines.push(`• *N° Cuenta:* ${bankDetails.numeroCuenta}`);
-      summaryLines.push(`• *RUT:* ${bankDetails.rut}`);
-      summaryLines.push(`• *Titular:* ${bankDetails.nombre}`);
-      summaryLines.push(`• *Email:* ${bankDetails.email}`);
-      summaryLines.push(`\n_Por favor envía el comprobante respondiendo a este mensaje para despachar de inmediato._ 🚀`);
+      summaryLines.push(
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `🏦 *DATOS DE TRANSFERENCIA:*`,
+        `• *Banco:* ${bankDetails.banco}`,
+        `• *Tipo Cuenta:* ${bankDetails.tipoCuenta}`,
+        `• *N° Cuenta:* ${bankDetails.numeroCuenta}`,
+        `• *RUT:* ${bankDetails.rut}`,
+        `• *Nombre:* ${bankDetails.nombre}`,
+        `• *Email:* ${bankDetails.email}`,
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `📸 *Por favor enviar comprobante de transferencia respondiendo a este mensaje.*`
+      );
     } else {
-      summaryLines.push(`\n💵 _Pago en efectivo al repartidor al momento de la entrega._ 🛵💨`);
+      summaryLines.push(
+        `━━━━━━━━━━━━━━━━━━━━`,
+        `💵 *Pago en efectivo:* El repartidor cobrará al momento de la entrega en su domicilio.`
+      );
     }
 
+    const summaryText = summaryLines.join('\n');
     const newSaleId = crypto.randomUUID();
     const newSale: Sale = {
       id: newSaleId,
@@ -990,10 +1185,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
       subtotal_amount: subtotalAmount,
-      discount_type: discountType,
-      discount_value: discountValue,
+      discount_type: dType,
+      discount_value: dVal,
       discount_amount: discountAmount,
-      total_amount: calculatedTotal,
+      total_amount: finalTotal,
       status: 'completed',
       created_at: new Date().toISOString(),
       items: saleItemsList.map((si) => ({ ...si, sale_id: newSaleId })),
@@ -1021,8 +1216,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       success: true,
-      message: 'Venta registrada con éxito.',
-      summaryText: summaryLines.join('\n'),
+      message: 'Pedido y venta confirmada exitosamente.',
+      summaryText,
     };
   };
 
@@ -1049,6 +1244,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setInvoices,
         setExpenses,
         deleteSale,
+        confirmPendingOrder,
+        cancelPendingOrder,
+        updateSale,
         addInvoice,
         updateInvoice,
         deleteInvoice,
