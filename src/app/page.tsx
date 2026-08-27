@@ -78,8 +78,10 @@ export default function HomePage() {
     };
   }, [sales, products, promotions]);
 
-  // Filtrado de productos por categoría y término de búsqueda
+  // Filtrado de productos por categoría, término de búsqueda y visibilidad pública
   const filteredProducts = products.filter((p) => {
+    if (p.is_active === false) return false; // Oculto por el administrador
+
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -93,16 +95,18 @@ export default function HomePage() {
     return matchesSearch && matchesCategory;
   });
 
-  // Filtrado de promociones
+  // Filtrado de promociones (visibles)
   const filteredPromotions = promotions.filter((promo) => {
+    if (promo.is_active === false) return false; // Oculto por el administrador
+
     return (
       promo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       promo.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
 
-  // Identificar productos en stock crítico (< 3) para banner destacado
-  const lowStockProducts = products.filter((p) => p.stock > 0 && p.stock < 3);
+  // Identificar productos en stock crítico (< 6) para banner destacado (solo visibles)
+  const lowStockProducts = products.filter((p) => p.is_active !== false && p.stock > 0 && p.stock < 6);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

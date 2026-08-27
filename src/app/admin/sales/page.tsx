@@ -25,7 +25,7 @@ import {
   CheckSquare,
 } from 'lucide-react';
 
-type TimeFilter = 'day' | 'week' | 'month' | 'all';
+type TimeFilter = 'day' | 'week' | 'month' | 'specific_date' | 'all';
 type StatusFilter = 'all' | 'completed' | 'pending' | 'cancelled';
 
 export default function AdminSalesPage() {
@@ -35,6 +35,10 @@ export default function AdminSalesPage() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
   // Estados para Modal de Edición de Venta
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
@@ -89,6 +93,12 @@ export default function AdminSalesPage() {
           saleDate.getDate() === now.getDate() &&
           saleDate.getMonth() === now.getMonth() &&
           saleDate.getFullYear() === now.getFullYear();
+      } else if (timeFilter === 'specific_date' && selectedDate) {
+        const [targetYear, targetMonth, targetDay] = selectedDate.split('-').map(Number);
+        matchesTime =
+          saleDate.getFullYear() === targetYear &&
+          saleDate.getMonth() + 1 === targetMonth &&
+          saleDate.getDate() === targetDay;
       } else if (timeFilter === 'week') {
         const diffTime = Math.abs(now.getTime() - saleDate.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -115,7 +125,7 @@ export default function AdminSalesPage() {
 
       return matchesTime && matchesSearch;
     });
-  }, [sales, timeFilter, statusFilter, selectedMonth, searchTerm]);
+  }, [sales, timeFilter, statusFilter, selectedMonth, selectedDate, searchTerm]);
 
   const handleDeleteSale = (saleId: string) => {
     if (confirm('¿Deseas eliminar esta venta? Si estaba completada, se restaurará automáticamente el stock de sus productos.')) {
@@ -301,6 +311,28 @@ export default function AdminSalesPage() {
               </option>
             ))}
           </select>
+
+          {/* SELECTOR DE DÍA ESPECÍFICO / DÍAS ANTERIORES */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition-all ${
+              timeFilter === 'specific_date'
+                ? 'bg-purple-950/80 border-purple-500 shadow-neon-purple text-white'
+                : 'bg-zinc-950 border-zinc-700 text-zinc-300'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-purple-300">📅 Día:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDate(e.target.value);
+                  setTimeFilter('specific_date');
+                }
+              }}
+              className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+            />
+          </div>
 
           <button
             onClick={() => {

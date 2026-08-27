@@ -25,11 +25,14 @@ import {
   Upload,
   Loader2,
   Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
   const { products, setProducts } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'visible' | 'hidden'>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -41,6 +44,7 @@ export default function AdminProductsPage() {
   const [costPrice, setCostPrice] = useState<number>(5000);
   const [stock, setStock] = useState<number>(10);
   const [imageUrl, setImageUrl] = useState('');
+  const [isActive, setIsActive] = useState<boolean>(true);
 
   // Crop Modal State
   const [isCropOpen, setIsCropOpen] = useState(false);
@@ -77,11 +81,17 @@ export default function AdminProductsPage() {
   const categoriesList = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
 
   const filteredProducts = products
-    .filter(
-      (p) =>
+    .filter((p) => {
+      // Filtro de Visibilidad en Catálogo
+      if (visibilityFilter === 'visible' && p.is_active === false) return false;
+      if (visibilityFilter === 'hidden' && p.is_active !== false) return false;
+
+      // Filtro de Búsqueda
+      return (
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.category.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+      );
+    })
     .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
 
   const handleOpenAddForm = () => {
@@ -93,6 +103,7 @@ export default function AdminProductsPage() {
     setCostPrice(5000);
     setStock(10);
     setImageUrl('https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80');
+    setIsActive(true);
     setIsFormOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -106,8 +117,16 @@ export default function AdminProductsPage() {
     setCostPrice(product.cost_price || Math.round(product.price * 0.6));
     setStock(product.stock);
     setImageUrl(product.image_url);
+    setIsActive(product.is_active !== false);
     setIsFormOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleToggleVisibility = (product: Product) => {
+    const nextStatus = product.is_active === false ? true : false;
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, is_active: nextStatus } : p))
+    );
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -133,6 +152,7 @@ export default function AdminProductsPage() {
                 cost_price: Number(costPrice),
                 stock: editingProduct.stock, // Stock protegido contra edición manual
                 image_url: cleanedImageUrl,
+                is_active: isActive,
               }
             : p
         )
@@ -147,7 +167,7 @@ export default function AdminProductsPage() {
         cost_price: Number(costPrice),
         stock: 0, // Stock inicial en 0, solo se incrementa mediante Facturas de Abastecimiento
         image_url: cleanedImageUrl,
-        is_active: true,
+        is_active: isActive,
       };
       setProducts((prev) => [newProd, ...prev]);
     }
@@ -386,6 +406,20 @@ export default function AdminProductsPage() {
                   placeholder="Ej: Graduación 35°, botella 750cc"
                 />
               </div>
+
+              {/* Visibilidad en Catálogo Público */}
+              <div className="lg:col-span-3 flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 border border-zinc-800">
+                <input
+                  type="checkbox"
+                  id="isActiveToggle"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-zinc-900 border-zinc-700 cursor-pointer"
+                />
+                <label htmlFor="isActiveToggle" className="text-xs font-bold text-white cursor-pointer select-none">
+                  {isActive ? '👁️ Visible en Catálogo Público' : '👁️‍🗨️ Oculto (Solo Admin)'}
+                </label>
+              </div>
             </div>
 
             {/* BOTONES DE ACCIÓN: GUARDAR / CANCELAR */}
@@ -413,17 +447,54 @@ export default function AdminProductsPage() {
         </section>
       )}
 
-      {/* Barra de Búsqueda de Productos */}
+      {/* Barra de Búsqueda y Filtros de Visibilidad */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="relative max-w-md w-full">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
-          <input
-            type="text"
-            placeholder="Buscar producto por nombre o categoría..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-          />
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* Input de Búsqueda */}
+          <div className="relative max-w-md w-full sm:w-72">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              placeholder="Buscar producto por nombre o categoría..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+
+          {/* Filtros de Visibilidad en Catálogo */}
+          <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-2xl">
+            <button
+              onClick={() => setVisibilityFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                visibilityFilter === 'all'
+                  ? 'bg-purple-600 text-white shadow-neon-purple'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Todos ({products.length})
+            </button>
+            <button
+              onClick={() => setVisibilityFilter('visible')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                visibilityFilter === 'visible'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Visibles ({products.filter((p) => p.is_active !== false).length})
+            </button>
+            <button
+              onClick={() => setVisibilityFilter('hidden')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                visibilityFilter === 'hidden'
+                  ? 'bg-amber-500 text-black shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Ocultos ({products.filter((p) => p.is_active === false).length})
+            </button>
+          </div>
         </div>
 
         <span className="text-xs text-zinc-400 font-medium">
@@ -437,26 +508,54 @@ export default function AdminProductsPage() {
           const cost = prod.cost_price || Math.round(prod.price * 0.6);
           const marginVal = prod.price - cost;
           const marginPct = prod.price > 0 ? Math.round((marginVal / prod.price) * 100) : 0;
+          const isProdVisible = prod.is_active !== false;
 
           return (
             <div
               key={prod.id}
-              className="group bg-zinc-900/90 border border-zinc-800 hover:border-purple-500/50 rounded-2xl p-3.5 flex flex-col justify-between transition-all shadow-lg hover:shadow-neon-purple"
+              className={`group bg-zinc-900/90 border rounded-2xl p-3.5 flex flex-col justify-between transition-all shadow-lg ${
+                !isProdVisible
+                  ? 'border-amber-500/40 bg-zinc-950/60 opacity-80'
+                  : 'border-zinc-800 hover:border-purple-500/50 hover:shadow-neon-purple'
+              }`}
             >
               {/* Previsualización 1:1 Cuadrada */}
               <SquareImageContainer
                 src={prod.image_url}
                 alt={prod.name}
                 objectFit="cover"
-                badgeText={prod.stock < 3 ? (prod.stock === 0 ? 'Agotado' : `Stock: ${prod.stock}`) : undefined}
-                badgeType={prod.stock < 3 ? (prod.stock === 0 ? 'outOfStock' : 'warning') : undefined}
+                badgeText={
+                  !isProdVisible
+                    ? 'Oculto en Tienda'
+                    : prod.stock < 6
+                    ? prod.stock === 0
+                      ? 'Agotado'
+                      : `Stock: ${prod.stock}`
+                    : undefined
+                }
+                badgeType={
+                  !isProdVisible
+                    ? 'warning'
+                    : prod.stock < 6
+                    ? prod.stock === 0
+                      ? 'outOfStock'
+                      : 'warning'
+                    : undefined
+                }
               />
 
               <div className="mt-3 flex-1 flex flex-col justify-between">
                 <div>
-                  <span className="text-[9px] uppercase font-bold tracking-wider text-purple-400">
-                    {prod.category}
-                  </span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[9px] uppercase font-bold tracking-wider text-purple-400">
+                      {prod.category}
+                    </span>
+                    {!isProdVisible && (
+                      <span className="text-[9px] font-bold text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-500/30">
+                        Oculto
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-sm font-extrabold text-white truncate">{prod.name}</h3>
                   {prod.description && !prod.description.toLowerCase().includes('factura') && (
                     <p className="text-xs text-zinc-400 line-clamp-2 mt-0.5">{prod.description}</p>
@@ -485,7 +584,7 @@ export default function AdminProductsPage() {
                     <span className="text-zinc-400">Stock Bodega:</span>
                     <span
                       className={`font-black ${
-                        prod.stock < 3 ? 'text-red-400 animate-pulse' : 'text-zinc-200'
+                        prod.stock < 6 ? 'text-red-400 animate-pulse' : 'text-zinc-200'
                       }`}
                     >
                       {prod.stock} un.
@@ -494,7 +593,30 @@ export default function AdminProductsPage() {
                 </div>
 
                 {/* Botones de Acción */}
-                <div className="mt-3 pt-2 border-t border-zinc-800 flex justify-end gap-2">
+                <div className="mt-3 pt-2 border-t border-zinc-800 flex items-center justify-between gap-1.5">
+                  {/* Botón Rápido de Ocultar / Mostrar en Tienda */}
+                  <button
+                    onClick={() => handleToggleVisibility(prod)}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all border ${
+                      isProdVisible
+                        ? 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-500/30'
+                    }`}
+                    title={isProdVisible ? 'Ocultar producto de la tienda pública' : 'Mostrar producto en tienda pública'}
+                  >
+                    {isProdVisible ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Visible</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Oculto</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={() => handleOpenEditForm(prod)}
                     className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"

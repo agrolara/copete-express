@@ -54,7 +54,7 @@ import {
   Legend,
 } from 'recharts';
 
-type TimeRangeFilter = 'day' | 'week' | 'month' | 'all';
+type TimeRangeFilter = 'day' | 'week' | 'month' | 'specific_date' | 'all';
 
 export default function AdminDashboardPage() {
   const {
@@ -74,9 +74,13 @@ export default function AdminDashboardPage() {
     resetAllData,
   } = useCart();
 
-  // Estado del Filtro Temporal (Por Día, Por Semana, Por Mes, Todo)
+  // Estado del Filtro Temporal (Por Día, Por Semana, Por Mes, Día Específico, Todo)
   const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [isProcessingPending, setIsProcessingPending] = useState<string | null>(null);
 
   // Modal para Crear Pedido Manual por WhatsApp (Administradores)
@@ -228,7 +232,7 @@ export default function AdminDashboardPage() {
       });
   }, [sales, expenses]);
 
-  // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes Específico, Todo)
+  // 1. FILTRADO TEMPORAL DE VENTAS (Día, Semana, Mes Específico, Día Específico, Todo)
   const filteredSales = useMemo(() => {
     const now = new Date();
 
@@ -240,6 +244,15 @@ export default function AdminDashboardPage() {
           saleDate.getDate() === now.getDate() &&
           saleDate.getMonth() === now.getMonth() &&
           saleDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'specific_date' && selectedDate) {
+        const [targetYear, targetMonth, targetDay] = selectedDate.split('-').map(Number);
+        return (
+          saleDate.getFullYear() === targetYear &&
+          saleDate.getMonth() + 1 === targetMonth &&
+          saleDate.getDate() === targetDay
         );
       }
 
@@ -265,7 +278,7 @@ export default function AdminDashboardPage() {
 
       return true; // 'all'
     });
-  }, [sales, timeRange, selectedMonth]);
+  }, [sales, timeRange, selectedMonth, selectedDate]);
 
   // 2. FILTRADO TEMPORAL DE GASTOS
   const filteredExpenses = useMemo(() => {
@@ -279,6 +292,15 @@ export default function AdminDashboardPage() {
           expDate.getDate() === now.getDate() &&
           expDate.getMonth() === now.getMonth() &&
           expDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'specific_date' && selectedDate) {
+        const [targetYear, targetMonth, targetDay] = selectedDate.split('-').map(Number);
+        return (
+          expDate.getFullYear() === targetYear &&
+          expDate.getMonth() + 1 === targetMonth &&
+          expDate.getDate() === targetDay
         );
       }
 
@@ -304,7 +326,7 @@ export default function AdminDashboardPage() {
 
       return true; // 'all'
     });
-  }, [expenses, timeRange, selectedMonth]);
+  }, [expenses, timeRange, selectedMonth, selectedDate]);
 
   // 3. FILTRADO TEMPORAL DE FACTURAS DE COMPRA
   const filteredInvoices = useMemo(() => {
@@ -318,6 +340,15 @@ export default function AdminDashboardPage() {
           invDate.getDate() === now.getDate() &&
           invDate.getMonth() === now.getMonth() &&
           invDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (timeRange === 'specific_date' && selectedDate) {
+        const [targetYear, targetMonth, targetDay] = selectedDate.split('-').map(Number);
+        return (
+          invDate.getFullYear() === targetYear &&
+          invDate.getMonth() + 1 === targetMonth &&
+          invDate.getDate() === targetDay
         );
       }
 
@@ -343,7 +374,7 @@ export default function AdminDashboardPage() {
 
       return true; // 'all'
     });
-  }, [invoices, timeRange, selectedMonth]);
+  }, [invoices, timeRange, selectedMonth, selectedDate]);
 
   // 4. MÉTRICAS FINANCIERAS COMPLETAS: VENTAS, COSTOS DE MERCADERÍA, GASTOS OPERACIONALES Y COMPRAS FACTURADAS
   const financialMetrics = useMemo(() => {
@@ -720,6 +751,28 @@ export default function AdminDashboardPage() {
                 </option>
               ))}
             </select>
+
+            {/* SELECTOR DE DÍA ESPECÍFICO / DÍAS ANTERIORES */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition-all ${
+                timeRange === 'specific_date'
+                  ? 'bg-purple-950/80 border-purple-500 shadow-neon-purple text-white'
+                  : 'bg-zinc-950 border-zinc-700 text-zinc-300'
+              }`}
+            >
+              <span className="text-[11px] font-bold text-purple-300">📅 Día:</span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSelectedDate(e.target.value);
+                    setTimeRange('specific_date');
+                  }
+                }}
+                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+              />
+            </div>
 
             <button
               onClick={() => {
