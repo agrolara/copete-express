@@ -27,10 +27,11 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Boxes,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
-  const { products, setProducts } = useCart();
+  const { products, setProducts, globalLowStockThreshold } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'visible' | 'hidden'>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -43,6 +44,7 @@ export default function AdminProductsPage() {
   const [price, setPrice] = useState<number>(8990);
   const [costPrice, setCostPrice] = useState<number>(5000);
   const [stock, setStock] = useState<number>(10);
+  const [minStockAlert, setMinStockAlert] = useState<number>(6);
   const [imageUrl, setImageUrl] = useState('');
   const [isActive, setIsActive] = useState<boolean>(true);
 
@@ -102,6 +104,7 @@ export default function AdminProductsPage() {
     setPrice(8990);
     setCostPrice(5000);
     setStock(10);
+    setMinStockAlert(globalLowStockThreshold || 6);
     setImageUrl('https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=600&q=80');
     setIsActive(true);
     setIsFormOpen(true);
@@ -116,6 +119,7 @@ export default function AdminProductsPage() {
     setPrice(product.price);
     setCostPrice(product.cost_price || Math.round(product.price * 0.6));
     setStock(product.stock);
+    setMinStockAlert(product.min_stock_alert ?? globalLowStockThreshold ?? 6);
     setImageUrl(product.image_url);
     setIsActive(product.is_active !== false);
     setIsFormOpen(true);
@@ -151,6 +155,7 @@ export default function AdminProductsPage() {
                 price: Number(price),
                 cost_price: Number(costPrice),
                 stock: editingProduct.stock, // Stock protegido contra edición manual
+                min_stock_alert: Number(minStockAlert),
                 image_url: cleanedImageUrl,
                 is_active: isActive,
               }
@@ -165,7 +170,8 @@ export default function AdminProductsPage() {
         category,
         price: Number(price),
         cost_price: Number(costPrice),
-        stock: 0, // Stock inicial en 0, solo se incrementa mediante Facturas de Abastecimiento
+        stock: 0, // Stock inicial en 0, solo se incrementa mediante Facturas de Abastecimiento o Ajustes de Kardex
+        min_stock_alert: Number(minStockAlert),
         image_url: cleanedImageUrl,
         is_active: isActive,
       };
@@ -195,11 +201,19 @@ export default function AdminProductsPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
+            href="/admin/inventory"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900 text-purple-300 font-extrabold text-xs border border-purple-500/40 transition-all"
+          >
+            <Boxes className="w-4 h-4" />
+            <span>📦 Control de Inventario & Kardex</span>
+          </Link>
+
+          <Link
             href="/admin/invoices"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 hover:opacity-95 transition-all border border-emerald-400/30"
           >
             <FileText className="w-4 h-4" />
-            <span>📦 Ingresar por Factura (Principal)</span>
+            <span>Facturas de Abastecimiento</span>
           </Link>
 
           {!isFormOpen && (
@@ -325,8 +339,25 @@ export default function AdminProductsPage() {
                   />
                 </div>
                 <span className="text-[10px] text-amber-400/90 font-medium block mt-1 leading-tight">
-                  🔒 Carga stock ingresando Facturas
+                  🔒 Carga vía Factura o Kardex
                 </span>
+              </div>
+
+              {/* Alerta Mínima de Stock */}
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-bold text-amber-400 mb-1.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Alerta Mínima</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={minStockAlert}
+                  onChange={(e) => setMinStockAlert(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full px-4 py-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-center text-white font-mono font-bold text-sm focus:outline-none focus:border-purple-500"
+                  placeholder="6"
+                />
+                <span className="text-[10px] text-zinc-500 block mt-1">Avisar si stock &lt; este valor</span>
               </div>
 
               {/* Margen Calculado */}
@@ -344,7 +375,7 @@ export default function AdminProductsPage() {
               </div>
 
               {/* URL Imagen o Subir Archivo */}
-              <div className="lg:col-span-4">
+              <div className="lg:col-span-5">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-zinc-300">
                     Foto del Producto (Subir o Enlace)
@@ -394,9 +425,12 @@ export default function AdminProductsPage() {
                   </button>
                 </div>
               </div>
+            </div>
 
+            {/* FILA 3: DESCRIPCIÓN Y VISIBILIDAD */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-5 items-center">
               {/* Descripción */}
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-8">
                 <label className="block text-xs font-bold text-zinc-300 mb-1.5">Descripción para Tienda</label>
                 <input
                   type="text"
@@ -408,7 +442,7 @@ export default function AdminProductsPage() {
               </div>
 
               {/* Visibilidad en Catálogo Público */}
-              <div className="lg:col-span-3 flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 border border-zinc-800">
+              <div className="lg:col-span-4 flex items-center gap-3 p-3 rounded-2xl bg-zinc-950 border border-zinc-800">
                 <input
                   type="checkbox"
                   id="isActiveToggle"

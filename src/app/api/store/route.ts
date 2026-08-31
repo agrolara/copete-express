@@ -39,6 +39,8 @@ export async function POST(req: Request) {
       if (Array.isArray(payload.sales)) store.sales = payload.sales;
       if (Array.isArray(payload.invoices)) store.invoices = payload.invoices;
       if (Array.isArray(payload.expenses)) store.expenses = payload.expenses;
+      if (Array.isArray(payload.inventoryMovements)) store.inventoryMovements = payload.inventoryMovements;
+      if (typeof payload.globalLowStockThreshold === 'number') store.globalLowStockThreshold = payload.globalLowStockThreshold;
       if (typeof payload.whatsappNumber === 'string') store.whatsappNumber = payload.whatsappNumber;
       if (payload.bankDetails && typeof payload.bankDetails === 'object') store.bankDetails = payload.bankDetails;
       await saveStoreAsync(store);
@@ -155,12 +157,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, store });
     }
 
+    if (action === 'ADJUST_STOCK') {
+      const { updatedProducts, updatedMovements } = payload;
+      if (updatedProducts) store.products = updatedProducts;
+      if (updatedMovements) store.inventoryMovements = updatedMovements;
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'RECONCILE_INVENTORY') {
+      const { updatedProducts, updatedMovements } = payload;
+      if (updatedProducts) store.products = updatedProducts;
+      if (updatedMovements) store.inventoryMovements = updatedMovements;
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
+    if (action === 'UPDATE_INVENTORY_SETTINGS') {
+      if (typeof payload.globalLowStockThreshold === 'number') {
+        store.globalLowStockThreshold = payload.globalLowStockThreshold;
+      }
+      await saveStoreAsync(store);
+      return NextResponse.json({ success: true, store });
+    }
+
     if (action === 'RESET_ALL') {
       store.products = [];
       store.promotions = [];
       store.sales = [];
       store.invoices = [];
       store.expenses = [];
+      store.inventoryMovements = [];
       await saveStoreAsync(store);
       return NextResponse.json({ success: true, store });
     }

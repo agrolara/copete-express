@@ -63,6 +63,7 @@ export default function AdminDashboardPage() {
     sales,
     invoices,
     expenses,
+    globalLowStockThreshold,
     setProducts,
     whatsappNumber,
     setWhatsappNumber,
@@ -548,7 +549,10 @@ export default function AdminDashboardPage() {
     { name: 'Agotados (0)', value: outOfStockCount, color: '#ef4444' },
   ];
 
-  const criticalStockProducts = products.filter((p) => p.stock < 6);
+  const criticalStockProducts = products.filter((p) => {
+    const threshold = p.min_stock_alert ?? globalLowStockThreshold ?? 6;
+    return p.stock < threshold;
+  });
 
   // Lista de Pedidos Web Pendientes de Confirmar
   const pendingOrders = useMemo(() => {
@@ -933,7 +937,7 @@ export default function AdminDashboardPage() {
       {/* ALERTA DE STOCK CRÍTICO */}
       {criticalStockProducts.length > 0 && (
         <section className="p-5 rounded-3xl bg-gradient-to-r from-red-950/80 via-zinc-900 to-orange-950/80 border-2 border-red-500/60 shadow-neon-red space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-red-600/30 text-red-400 border border-red-500/40 animate-pulse">
                 <AlertTriangle className="w-6 h-6" />
@@ -946,17 +950,25 @@ export default function AdminDashboardPage() {
                   </span>
                 </h3>
                 <p className="text-xs text-zinc-300">
-                  Menos de 6 unidades en bodega. Ingresa una factura de abastecimiento para reponer stock:
+                  Stock bajo el umbral mínimo configurado. Ajusta en Kardex o ingresa facturas de reposición:
                 </p>
               </div>
             </div>
-            <Link
-              href="/admin/invoices"
-              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
-            >
-              <FileText className="w-4 h-4" />
-              <span>Ingresar Factura</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/admin/inventory"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-all shadow-md"
+              >
+                <span>📦 Control de Inventario</span>
+              </Link>
+              <Link
+                href="/admin/invoices"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Ingresar Factura</span>
+              </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -971,13 +983,20 @@ export default function AdminDashboardPage() {
                     Stock actual: {prod.stock} un.
                   </span>
                 </div>
-                <Link
-                  href="/admin/invoices"
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 border border-purple-500/40 text-purple-300 hover:text-white text-xs font-bold transition-all shrink-0"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Factura</span>
-                </Link>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Link
+                    href="/admin/inventory"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-950/50 hover:bg-purple-900/60 border border-purple-500/30 text-purple-300 text-[11px] font-bold transition-all"
+                  >
+                    <span>Ajustar</span>
+                  </Link>
+                  <Link
+                    href="/admin/invoices"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 border border-purple-500/40 text-purple-300 hover:text-white text-[11px] font-bold transition-all"
+                  >
+                    <span>Factura</span>
+                  </Link>
+                </div>
               </div>
             ))}
           </div>

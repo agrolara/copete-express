@@ -16,6 +16,7 @@ export interface Product {
   price: number;
   cost_price?: number; // Costo unitario de adquisición para cálculo de márgenes y utilidades
   stock: number;
+  min_stock_alert?: number; // Umbral de alerta de stock bajo personalizado para este producto
   image_url: string;
   is_active: boolean;
   created_at?: string;
@@ -153,7 +154,46 @@ export interface ProductPopularity {
 }
 
 export interface StockStatusSummary {
-  healthy: number;   // stock >= 3
-  critical: number;  // 0 < stock < 3
+  healthy: number;   // stock >= 6
+  critical: number;  // 0 < stock < 6
   outOfStock: number;// stock === 0
+}
+
+// 4. ESTRUCTURAS PARA CONTROL, AJUSTE Y KARDEX DE INVENTARIO
+export type InventoryMovementType =
+  | 'ajuste_manual'
+  | 'factura'
+  | 'venta'
+  | 'devolucion'
+  | 'conteo_fisico'
+  | 'merma'
+  | 'perdida'
+  | 'consumo_interno'
+  | 'inicial';
+
+export interface InventoryMovement {
+  id: string;
+  product_id: string;
+  product_name: string;
+  category?: string;
+  movement_type: InventoryMovementType;
+  quantity_change: number; // Variación (+ / -)
+  previous_stock: number;
+  resulting_stock: number;
+  reason: string;          // Motivo de ajuste obligatorio (Merma, Pérdida, Conteo, Factura #, etc.)
+  user_email?: string;
+  notes?: string;          // Observaciones adicionales
+  created_at: string;
+}
+
+export interface InventoryReconciliationItem {
+  product_id: string;
+  product_name: string;
+  category: string;
+  cost_price: number;
+  selling_price: number;
+  system_stock: number;
+  counted_stock: number;
+  difference: number;
+  reason?: string;
 }

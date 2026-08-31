@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
-import { Product, Promotion, Sale, Invoice, Expense } from '@/types';
+import { Product, Promotion, Sale, Invoice, Expense, InventoryMovement } from '@/types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_PROMOTIONS,
@@ -16,6 +16,8 @@ export interface AppStoreData {
   sales: Sale[];
   invoices: Invoice[];
   expenses: Expense[];
+  inventoryMovements?: InventoryMovement[];
+  globalLowStockThreshold?: number;
   whatsappNumber: string;
   bankDetails: {
     banco: string;
@@ -42,6 +44,8 @@ const defaultStore: AppStoreData = {
   sales: INITIAL_SALES,
   invoices: INITIAL_INVOICES,
   expenses: INITIAL_EXPENSES,
+  inventoryMovements: [],
+  globalLowStockThreshold: 6,
   whatsappNumber: '56912345678',
   bankDetails: {
     banco: 'Banco Estado / Banco de Chile',
@@ -65,6 +69,8 @@ export function getStore(): AppStoreData {
       if (!parsed.sales) parsed.sales = [];
       if (!parsed.invoices) parsed.invoices = [];
       if (!parsed.expenses) parsed.expenses = [];
+      if (!parsed.inventoryMovements) parsed.inventoryMovements = [];
+      if (!parsed.globalLowStockThreshold) parsed.globalLowStockThreshold = 6;
       memoryStore = parsed;
       return parsed;
     }
