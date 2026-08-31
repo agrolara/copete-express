@@ -58,11 +58,30 @@ export default function AdminInvoicesPage() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [newProductName, setNewProductName] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('Piscos');
+  const [customNewProductCategory, setCustomNewProductCategory] = useState('');
   const [newProductCost, setNewProductCost] = useState<number>(0);
   const [newProductPrice, setNewProductPrice] = useState<number>(0);
   const [itemQuantity, setItemQuantity] = useState<number>(12);
   const [itemCost, setItemCost] = useState<number>(0);
   const [itemSellingPrice, setItemSellingPrice] = useState<number>(0);
+
+  // Lista dinámica de categorías para creación de productos
+  const categoriesList = useMemo(() => {
+    const base = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
+    const map = new Map<string, string>();
+    base.forEach((b) => map.set(b.toLowerCase().trim(), b));
+
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) {
+        const trimmed = p.category.trim();
+        const lower = trimmed.toLowerCase();
+        if (!map.has(lower)) {
+          map.set(lower, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [products]);
 
   // Estados para ver detalle de factura
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -178,6 +197,11 @@ export default function AdminInvoicesPage() {
         return;
       }
 
+      const finalCat =
+        newProductCategory === '__custom__'
+          ? customNewProductCategory.trim() || 'General'
+          : newProductCategory;
+
       const generatedId = crypto.randomUUID();
       setInvoiceItems((prev) => [
         ...prev,
@@ -185,7 +209,7 @@ export default function AdminInvoicesPage() {
           id: crypto.randomUUID(),
           product_id: generatedId,
           product_name: newProductName.trim(),
-          category: newProductCategory,
+          category: finalCat,
           quantity: Math.max(1, itemQuantity),
           cost_price: Number(newProductCost),
           selling_price: newProductPrice > 0 ? Number(newProductPrice) : Math.round(newProductCost * 1.4),
@@ -195,6 +219,7 @@ export default function AdminInvoicesPage() {
 
       // Reset
       setNewProductName('');
+      setCustomNewProductCategory('');
       setNewProductCost(0);
       setNewProductPrice(0);
       setItemQuantity(12);
@@ -650,13 +675,26 @@ export default function AdminInvoicesPage() {
                       onChange={(e) => setNewProductCategory(e.target.value)}
                       className="w-full px-2 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white"
                     >
-                      <option value="Piscos">Piscos</option>
-                      <option value="Cervezas">Cervezas</option>
-                      <option value="Destilados">Destilados</option>
-                      <option value="Vinos">Vinos</option>
-                      <option value="Bebidas & Hielo">Bebidas & Hielo</option>
-                      <option value="Snacks & Otros">Snacks & Otros</option>
+                      {categoriesList.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__custom__" className="text-purple-400 font-bold">
+                        + Nueva Categoría...
+                      </option>
                     </select>
+
+                    {newProductCategory === '__custom__' && (
+                      <input
+                        type="text"
+                        required
+                        placeholder="Nueva categoría..."
+                        value={customNewProductCategory}
+                        onChange={(e) => setCustomNewProductCategory(e.target.value)}
+                        className="w-full mt-1.5 px-2 py-1 rounded-lg bg-zinc-900 border border-purple-500 text-xs text-white placeholder-zinc-500"
+                      />
+                    )}
                   </div>
 
                   <div className="sm:col-span-2">

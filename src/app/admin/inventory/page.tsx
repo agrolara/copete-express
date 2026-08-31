@@ -88,11 +88,20 @@ export default function AdminInventoryPage() {
 
   // Categorías Únicas
   const categories = useMemo(() => {
-    const set = new Set<string>();
+    const base = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
+    const map = new Map<string, string>();
+    base.forEach((b) => map.set(b.toLowerCase().trim(), b));
+
     products.forEach((p) => {
-      if (p.category) set.add(p.category);
+      if (p.category && p.category.trim()) {
+        const trimmed = p.category.trim();
+        const lower = trimmed.toLowerCase();
+        if (!map.has(lower)) {
+          map.set(lower, trimmed);
+        }
+      }
     });
-    return Array.from(set);
+    return Array.from(map.values());
   }, [products]);
 
   // Resumen Métrico de Inventario

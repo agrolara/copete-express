@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { Product } from '@/types';
@@ -41,6 +41,7 @@ export default function AdminProductsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Piscos');
+  const [customCategory, setCustomCategory] = useState('');
   const [price, setPrice] = useState<number>(8990);
   const [costPrice, setCostPrice] = useState<number>(5000);
   const [stock, setStock] = useState<number>(10);
@@ -80,7 +81,22 @@ export default function AdminProductsPage() {
     }
   };
 
-  const categoriesList = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
+  const categoriesList = useMemo(() => {
+    const base = ['Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo', 'Snacks & Otros'];
+    const map = new Map<string, string>();
+    base.forEach((b) => map.set(b.toLowerCase().trim(), b));
+
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) {
+        const trimmed = p.category.trim();
+        const lower = trimmed.toLowerCase();
+        if (!map.has(lower)) {
+          map.set(lower, trimmed);
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [products]);
 
   const filteredProducts = products
     .filter((p) => {
@@ -101,6 +117,7 @@ export default function AdminProductsPage() {
     setName('');
     setDescription('');
     setCategory('Piscos');
+    setCustomCategory('');
     setPrice(8990);
     setCostPrice(5000);
     setStock(10);
@@ -116,6 +133,7 @@ export default function AdminProductsPage() {
     setName(product.name);
     setDescription(product.description || '');
     setCategory(product.category);
+    setCustomCategory('');
     setPrice(product.price);
     setCostPrice(product.cost_price || Math.round(product.price * 0.6));
     setStock(product.stock);
@@ -142,6 +160,7 @@ export default function AdminProductsPage() {
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanedImageUrl = formatImageUrl(imageUrl);
+    const finalCategory = category === '__custom__' ? (customCategory.trim() || 'General') : category;
 
     if (editingProduct) {
       setProducts((prev) =>
@@ -151,7 +170,7 @@ export default function AdminProductsPage() {
                 ...p,
                 name: name.trim(),
                 description: description.trim(),
-                category,
+                category: finalCategory,
                 price: Number(price),
                 cost_price: Number(costPrice),
                 stock: editingProduct.stock, // Stock protegido contra edición manual
@@ -167,7 +186,7 @@ export default function AdminProductsPage() {
         id: crypto.randomUUID(),
         name: name.trim(),
         description: description.trim(),
-        category,
+        category: finalCategory,
         price: Number(price),
         cost_price: Number(costPrice),
         stock: 0, // Stock inicial en 0, solo se incrementa mediante Facturas de Abastecimiento o Ajustes de Kardex
@@ -288,7 +307,21 @@ export default function AdminProductsPage() {
                       {cat}
                     </option>
                   ))}
+                  <option value="__custom__" className="text-purple-400 font-bold">
+                    + Crear Nueva Categoría...
+                  </option>
                 </select>
+
+                {category === '__custom__' && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Escribe el nombre de la categoría..."
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 rounded-xl bg-zinc-900 border border-purple-500 text-xs text-white placeholder-zinc-500 focus:outline-none"
+                  />
+                )}
               </div>
 
               {/* Precio Venta */}

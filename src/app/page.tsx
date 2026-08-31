@@ -87,10 +87,14 @@ export default function HomePage() {
       p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const normSelected = selectedCategory.toLowerCase().replace('&', 'y').replace(/s\b/g, '').replace(/\s+/g, ' ').trim();
+    const normProductCat = (p.category || '').toLowerCase().replace('&', 'y').replace(/s\b/g, '').replace(/\s+/g, ' ').trim();
+
     const matchesCategory =
       selectedCategory === 'Todos' ||
       selectedCategory === 'Promos' ||
-      p.category.toLowerCase() === selectedCategory.toLowerCase();
+      p.category.toLowerCase() === selectedCategory.toLowerCase() ||
+      normProductCat === normSelected;
 
     return matchesSearch && matchesCategory;
   });

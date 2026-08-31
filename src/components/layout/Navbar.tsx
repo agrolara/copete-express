@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { ShoppingBag, Search, ShieldAlert, Sparkles, Flame, Menu, X, Wine } from 'lucide-react';
@@ -18,10 +18,39 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedCategory = 'Todos',
   onSelectCategory,
 }) => {
-  const { totalItems, setIsCartOpen } = useCart();
+  const { totalItems, setIsCartOpen, products } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const categories = ['Todos', 'Promos', 'Piscos', 'Cervezas', 'Destilados', 'Vinos', 'Bebidas & Hielo'];
+  // Lista dinámica de categorías: base predefinida + cualquier nueva categoría creada en el catálogo
+  const categories = useMemo(() => {
+    const defaultOrder = [
+      'Todos',
+      'Promos',
+      'Piscos',
+      'Cervezas',
+      'Destilados',
+      'Vinos',
+      'Bebidas & Hielo',
+      'Snacks & Otros',
+    ];
+    const catMap = new Map<string, string>();
+    defaultOrder.forEach((c) => {
+      catMap.set(c.toLowerCase().trim(), c);
+    });
+
+    // Agregar dinámicamente todas las categorías que tengan productos en el catálogo
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) {
+        const trimmed = p.category.trim();
+        const lower = trimmed.toLowerCase();
+        if (!catMap.has(lower)) {
+          catMap.set(lower, trimmed);
+        }
+      }
+    });
+
+    return Array.from(catMap.values());
+  }, [products]);
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-zinc-950/80 border-b border-zinc-800/80">
