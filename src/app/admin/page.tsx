@@ -1676,7 +1676,6 @@ export default function AdminDashboardPage() {
                       type="button"
                       onClick={() => {
                         setDiscountType('percentage');
-                        if (discountValue === 0) setDiscountValue(10);
                       }}
                       className={`flex items-center justify-center gap-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
                         discountType === 'percentage'
@@ -1691,7 +1690,6 @@ export default function AdminDashboardPage() {
                       type="button"
                       onClick={() => {
                         setDiscountType('fixed');
-                        if (discountValue === 0) setDiscountValue(2000);
                       }}
                       className={`flex items-center justify-center gap-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
                         discountType === 'fixed'
@@ -1706,74 +1704,111 @@ export default function AdminDashboardPage() {
 
                   {/* Input de Valor según el tipo seleccionado */}
                   {discountType === 'percentage' && (
-                    <div className="space-y-2 pt-1 animate-fade-in">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="any"
-                            value={discountValue || ''}
-                            onChange={(e) => setDiscountValue(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
-                            placeholder="Ej: 10"
-                            className="w-full pl-3 pr-8 py-2 rounded-xl bg-zinc-900 border border-amber-500/50 text-xs font-bold text-white focus:outline-none font-mono"
-                          />
-                          <span className="absolute right-3 top-2 text-xs font-bold text-amber-400">%</span>
-                        </div>
-                        {/* Botones rápidos */}
-                        <div className="flex gap-1">
-                          {[5, 10, 15, 20].map((pct) => (
-                            <button
-                              key={pct}
-                              type="button"
-                              onClick={() => setDiscountValue(pct)}
-                              className={`px-2.5 py-2 rounded-xl text-xs font-black transition-all ${
-                                discountValue === pct
-                                  ? 'bg-amber-500 text-black'
-                                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800'
-                              }`}
-                            >
-                              {pct}%
-                            </button>
-                          ))}
-                        </div>
+                    <div className="space-y-2.5 pt-1 animate-fade-in">
+                      <div className="relative w-full">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max="100"
+                          step="any"
+                          value={discountValue === 0 ? '' : discountValue}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') {
+                              setDiscountValue(0);
+                            } else {
+                              const num = parseFloat(val);
+                              setDiscountValue(isNaN(num) ? 0 : Math.max(0, Math.min(100, num)));
+                            }
+                          }}
+                          placeholder="Ingresa porcentaje exacto (Ej: 15)"
+                          className="w-full pl-4 pr-16 py-3 sm:py-2.5 rounded-xl bg-zinc-900 border border-amber-500/50 text-base sm:text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-amber-400 select-none">%</span>
+                        {discountValue > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDiscountValue(0)}
+                            className="absolute right-9 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-400 hover:text-white transition-colors"
+                          >
+                            Borrar
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Botones de atajo rápido de porcentaje */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 shrink-0 mr-0.5">Sugerencias:</span>
+                        {[5, 10, 15, 20, 25].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setDiscountValue(pct)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${
+                              discountValue === pct
+                                ? 'bg-amber-500 text-black shadow-md'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800'
+                            }`}
+                          >
+                            {pct}%
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {discountType === 'fixed' && (
-                    <div className="space-y-2 pt-1 animate-fade-in">
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-2 text-xs font-bold text-emerald-400">$</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={discountValue || ''}
-                            onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
-                            placeholder="Ej: 3300"
-                            className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-emerald-500/50 text-xs font-bold text-white focus:outline-none font-mono"
-                          />
-                        </div>
-                        {/* Botones rápidos de monto */}
-                        <div className="flex gap-1">
-                          {[1000, 2000, 3000, 5000].map((amt) => (
-                            <button
-                              key={amt}
-                              type="button"
-                              onClick={() => setDiscountValue(amt)}
-                              className={`px-2 py-2 rounded-xl text-[11px] font-black transition-all ${
-                                discountValue === amt
-                                  ? 'bg-emerald-500 text-black'
-                                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800'
-                              }`}
-                            >
-                              ${amt.toLocaleString('es-CL')}
-                            </button>
-                          ))}
-                        </div>
+                    <div className="space-y-2.5 pt-1 animate-fade-in">
+                      {/* Campo de Monto Exacto con ancho completo y botones limpios */}
+                      <div className="relative w-full">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-emerald-400 select-none">$</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          step="any"
+                          value={discountValue === 0 ? '' : discountValue}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') {
+                              setDiscountValue(0);
+                            } else {
+                              const num = parseFloat(val);
+                              setDiscountValue(isNaN(num) ? 0 : Math.max(0, num));
+                            }
+                          }}
+                          placeholder="Ingresa cualquier monto exacto (Ej: 3300)"
+                          className="w-full pl-8 pr-16 py-3 sm:py-2.5 rounded-xl bg-zinc-900 border border-emerald-500/50 text-base sm:text-xs font-black text-white focus:outline-none focus:border-emerald-400 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        {discountValue > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDiscountValue(0)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-400 hover:text-white transition-colors"
+                          >
+                            Borrar
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Botones de atajo rápido de montos */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 shrink-0 mr-0.5">Sugerencias:</span>
+                        {[1000, 2000, 3000, 5000].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setDiscountValue(amt)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${
+                              discountValue === amt
+                                ? 'bg-emerald-500 text-black shadow-md'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-zinc-800'
+                            }`}
+                          >
+                            ${amt.toLocaleString('es-CL')}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
