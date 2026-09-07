@@ -1711,8 +1711,9 @@ export default function AdminDashboardPage() {
                         <div className="relative flex-1">
                           <input
                             type="number"
-                            min="1"
+                            min="0"
                             max="100"
+                            step="any"
                             value={discountValue || ''}
                             onChange={(e) => setDiscountValue(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
                             placeholder="Ej: 10"
@@ -1748,11 +1749,11 @@ export default function AdminDashboardPage() {
                           <span className="absolute left-3 top-2 text-xs font-bold text-emerald-400">$</span>
                           <input
                             type="number"
-                            min="100"
-                            step="500"
+                            min="0"
+                            step="any"
                             value={discountValue || ''}
                             onChange={(e) => setDiscountValue(Math.max(0, parseFloat(e.target.value) || 0))}
-                            placeholder="Ej: 2000"
+                            placeholder="Ej: 3300"
                             className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-emerald-500/50 text-xs font-bold text-white focus:outline-none font-mono"
                           />
                         </div>
