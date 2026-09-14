@@ -27,12 +27,16 @@ export interface AppStoreData {
     nombre: string;
     email: string;
   };
+  updated_at?: string;
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.agrolara.dedyn.io';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4MDk4MDE4MCwiZXhwIjo0OTM2NjUzNzgwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.jU61l2XNxwvk_955XHpXC5YV7nWHxcODH-c-AzPYN5w';
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseKey || 'dummy-key');
+export const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 // Almacén persistente en carpeta data/ fuera de .next para preservar datos entre compilaciones y reinicios
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
@@ -55,6 +59,7 @@ const defaultStore: AppStoreData = {
     nombre: 'Copete Express SpA',
     email: 'pagos@copeteexpress.cl',
   },
+  updated_at: new Date().toISOString(),
 };
 
 let memoryStore: AppStoreData | null = null;
@@ -104,34 +109,77 @@ export function saveStore(store: AppStoreData) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
+
+    // Respaldo de seguridad rotativo en subcarpeta backups
+    const backupDir = path.join(dir, 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(backupDir, 'copete_express_store.backup.json'), JSON.stringify(store, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving server store file:', e);
   }
 }
 
 export async function getStoreAsync(): Promise<AppStoreData> {
+  const localStore = getStore();
   try {
-    const { data, error } = await supabaseAdmin.from('copete_store').select('data').eq('id', 'main').single();
+    const { data, error } = await supabaseAdmin
+      .from('copete_store')
+      .select('data, updated_at')
+      .eq('id', 'main')
+      .single();
+
     if (!error && data?.data) {
-      const store = data.data as AppStoreData;
-      saveStore(store);
-      return store;
+      const supaStore = data.data as AppStoreData;
+      const supaUpdatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+      const localUpdatedAt = localStore.updated_at ? new Date(localStore.updated_at).getTime() : 0;
+
+      // Si el archivo local es más reciente o tiene mayor volumen de datos (ej. nuevas ventas/productos)
+      const localHasMore =
+        (localStore.products?.length || 0) > (supaStore.products?.length || 0) ||
+        (localStore.sales?.length || 0) > (supaStore.sales?.length || 0);
+
+      if (localUpdatedAt > supaUpdatedAt || (localUpdatedAt === 0 && localHasMore)) {
+        console.log('[ServerStore] Local store is newer or has more items. Syncing local to Supabase...');
+        localStore.updated_at = new Date().toISOString();
+        saveStore(localStore);
+        await supabaseAdmin.from('copete_store').upsert({
+          id: 'main',
+          data: localStore,
+          updated_at: localStore.updated_at,
+        });
+        return localStore;
+      }
+
+      // Si Supabase es más reciente o igual, adoptamos Supabase y mantenemos respaldo local
+      supaStore.updated_at = data.updated_at || new Date().toISOString();
+      saveStore(supaStore);
+      return supaStore;
     }
   } catch (e) {
     console.error('Error fetching store from Supabase:', e);
   }
-  return getStore();
+  return localStore;
 }
 
 export async function saveStoreAsync(store: AppStoreData): Promise<void> {
+  const now = new Date().toISOString();
+  store.updated_at = now;
   saveStore(store);
+
   try {
-    await supabaseAdmin.from('copete_store').upsert({
+    const { error } = await supabaseAdmin.from('copete_store').upsert({
       id: 'main',
       data: store,
-      updated_at: new Date().toISOString()
+      updated_at: now,
     });
+    if (error) {
+      console.error('[ServerStore] Error upserting store to Supabase:', error);
+    } else {
+      console.log('[ServerStore] Synchronized store to Supabase successfully at:', now);
+    }
   } catch (e) {
-    console.error('Error saving store to Supabase:', e);
+    console.error('[ServerStore] Exception saving store to Supabase:', e);
   }
 }
